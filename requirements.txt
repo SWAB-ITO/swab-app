@@ -1,0 +1,14 @@
+# Core dependencies
+supabase==2.3.4              # Supabase Python client
+python-dotenv==1.0.0         # Environment variable management
+requests==2.31.0             # HTTP library for API calls
+
+# CLI interface
+click==8.1.7                 # Command-line interface creation
+rich==13.7.0                 # Beautiful terminal output
+
+# Data processing
+pandas==2.1.4                # CSV export and data manipulation
+
+# Utilities
+python-dateutil==2.8.2       # Date parsing
