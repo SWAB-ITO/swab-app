@@ -52,7 +52,3 @@ exports/
 # Generated data exports
 backend/data/*.csv
 backend/data/*.json
-
-# Symlinks (actual files are in frontend/)
-/app
-/components

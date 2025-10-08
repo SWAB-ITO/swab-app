@@ -343,9 +343,8 @@ npm run admin:check-env
 │   │   ├── supabase/            # Supabase client utilities
 │   │   └── utilities/           # Tools (check-env, verify-data)
 │   └── data/                    # Generated CSV exports
-├── frontend/                    # Frontend application
-│   ├── app/                     # Next.js app router pages
-│   └── components/              # React components
+├── app/                         # Next.js app router pages
+├── components/                  # React components
 ├── supabase/
 │   └── migrations/              # Database schema migrations
 └── docs/                        # Documentation

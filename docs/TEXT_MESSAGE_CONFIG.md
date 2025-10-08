@@ -321,8 +321,8 @@ npm run text:preview
 - Config structure is UI-friendly (campaigns, templates, variables)
 
 **To add UI:**
-1. Create Next.js page: `frontend/app/messages/page.tsx`
-2. Fetch config via API route: `frontend/app/api/messages/config/route.ts`
+1. Create Next.js page: `app/messages/page.tsx`
+2. Fetch config via API route: `app/api/messages/config/route.ts`
 3. Display in form editor
 4. Save updates back to JSON (or migrate to database)
 5. Call `npm run etl` via API route after save
