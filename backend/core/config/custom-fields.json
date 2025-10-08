@@ -1,0 +1,79 @@
+{
+  "$schema": "./custom-fields.schema.json",
+  "description": "Givebutter custom field configuration - maps to emoji custom fields in Givebutter",
+  "year": "2025",
+  "fields": [
+    {
+      "id": "signup_complete",
+      "name": "📝 Sign Up Complete",
+      "type": "yes_no",
+      "description": "Has the mentor completed their initial signup form?",
+      "source": "mn_tasks.signup_done",
+      "mapping": {
+        "true": "Yes",
+        "false": "No"
+      }
+    },
+    {
+      "id": "setup_complete",
+      "name": "💸 Givebutter Page Setup",
+      "type": "yes_no",
+      "description": "Has the mentor completed the setup form?",
+      "source": "mn_tasks.setup_done",
+      "mapping": {
+        "true": "Yes",
+        "false": "No"
+      }
+    },
+    {
+      "id": "shift_preference",
+      "name": "📆 Shift Preference",
+      "type": "text",
+      "description": "Mentor's preferred shift (Option 1-4)",
+      "source": "mentors.shift_preference"
+    },
+    {
+      "id": "partner_preference",
+      "name": "👯‍♂️ Partner Preference",
+      "type": "number",
+      "description": "Mentor's partner ranking preference",
+      "source": "mentors.partner_preference"
+    },
+    {
+      "id": "training_complete",
+      "name": "🚂 Mentor Training Complete",
+      "type": "yes_no",
+      "description": "Has the mentor completed training?",
+      "source": "mn_tasks.training_done",
+      "mapping": {
+        "true": "Yes",
+        "false": "No"
+      }
+    },
+    {
+      "id": "fully_fundraised",
+      "name": "📈 Fully Fundraised?",
+      "type": "yes_no",
+      "description": "Has the mentor raised at least $75?",
+      "source": "mn_tasks.fundraised_done",
+      "mapping": {
+        "true": "Yes",
+        "false": "No"
+      }
+    },
+    {
+      "id": "custom_text_message",
+      "name": "📱Custom Text Message 1️⃣",
+      "type": "text",
+      "description": "Personalized text message based on mentor status",
+      "source": "generated",
+      "max_length": 300
+    }
+  ],
+  "notes": [
+    "Emoji field names must match exactly what's in Givebutter",
+    "To change for a new year: update 'year' field and add/remove fields as needed",
+    "The 'name' field is the exact column name in Givebutter CSV",
+    "Source indicates where the data comes from (mentor table field or generated)"
+  ]
+}

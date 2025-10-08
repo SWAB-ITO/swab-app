@@ -1,0 +1,26 @@
+{
+  "$schema": "./tags.schema.json",
+  "description": "Givebutter contact tags configuration",
+  "year": "2025",
+  "tags": {
+    "default": "Mentors 2025",
+    "custom": []
+  },
+  "settings": {
+    "apply_default_to_all": true,
+    "apply_status_tags": true,
+    "delimiter": ", "
+  },
+  "notes": [
+    "Default tag is applied to all mentors",
+    "Status-based tags are applied based on mentor's status_category",
+    "Custom tags can be added for specific campaigns or cohorts",
+    "To change for a new year: update 'year' field and tag names",
+    "Tags are comma-separated in Givebutter CSV"
+  ],
+  "examples": {
+    "needs_setup_mentor": "Mentors 2025, Needs Action",
+    "needs_fundraising_mentor": "Mentors 2025",
+    "complete_mentor": "Mentors 2025, Fully Complete 2025"
+  }
+}

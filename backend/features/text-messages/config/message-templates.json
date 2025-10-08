@@ -1,0 +1,66 @@
+{
+  "$schema": "./message-templates.schema.json",
+  "campaigns": [
+    {
+      "id": "2025-initial-outreach",
+      "name": "Initial Outreach - January 2025",
+      "active": true,
+      "created_at": "2025-01-08",
+      "messages": {
+        "needs_setup": {
+          "template": "Hi {{first_name}}! 👋 Thanks for signing up as a SWAB mentor. Next step: Complete your setup form. Check your email for \"Next Steps\" from SWAB.",
+          "variables": ["first_name"],
+          "character_count": 156
+        },
+        "needs_page": {
+          "template": "Hey {{first_name}}! You've completed setup ✅ Now create your Givebutter fundraising page using the link from your \"Next Steps\" email. Let us know if you need help!",
+          "variables": ["first_name"],
+          "character_count": 171
+        },
+        "needs_fundraising": {
+          "template": "{{first_name}}, great job creating your page! 🎉 You've raised ${{amount_raised}} so far. Keep going - just ${{amount_remaining}} to hit your $75 goal!",
+          "variables": ["first_name", "amount_raised", "amount_remaining"],
+          "character_count": 151
+        },
+        "complete": {
+          "template": "Amazing work {{first_name}}! 🎉 You've raised ${{amount_raised}} and completed training. You're ALL SET for the event. Watch for details closer to the date!",
+          "variables": ["first_name", "amount_raised"],
+          "character_count": 160
+        }
+      }
+    }
+  ],
+  "variable_definitions": {
+    "first_name": {
+      "source": "mentors.first_name",
+      "description": "Mentor's first name",
+      "fallback": "there"
+    },
+    "preferred_name": {
+      "source": "mentors.preferred_name",
+      "description": "Mentor's preferred name (or first name if not set)",
+      "fallback": "{{first_name}}"
+    },
+    "amount_raised": {
+      "source": "mentors.amount_raised",
+      "description": "Total amount raised in dollars (no $ sign)",
+      "fallback": "0"
+    },
+    "amount_remaining": {
+      "source": "calculated",
+      "formula": "75 - amount_raised",
+      "description": "Amount remaining to reach $75 goal",
+      "fallback": "75"
+    },
+    "shift_preference": {
+      "source": "mentors.shift_preference",
+      "description": "Mentor's preferred shift (Option 1-4)",
+      "fallback": ""
+    }
+  },
+  "settings": {
+    "max_sms_length": 160,
+    "warn_over_length": true,
+    "allow_empty_messages": false
+  }
+}
