@@ -9,11 +9,74 @@
 -- Step 1: Drop old VIEW (we're making it a real table)
 DROP VIEW IF EXISTS mentors CASCADE;
 
--- Step 2: Rename existing tables to _raw suffix
+-- Step 2: Rename existing tables to _raw suffix (if they exist from old schema)
 ALTER TABLE IF EXISTS jotform_signups RENAME TO jotform_signups_raw;
 ALTER TABLE IF EXISTS jotform_setup RENAME TO jotform_setup_raw;
 ALTER TABLE IF EXISTS givebutter_members RENAME TO givebutter_members_raw;
 ALTER TABLE IF EXISTS givebutter_contacts RENAME TO givebutter_contacts_raw;
+
+-- ============================================================================
+-- LAYER 1: RAW TABLES (API dumps - create if don't exist)
+-- ============================================================================
+
+-- JOTFORM SIGNUPS RAW
+CREATE TABLE IF NOT EXISTS jotform_signups_raw (
+  submission_id TEXT PRIMARY KEY,
+  prefix TEXT,
+  first_name TEXT,
+  middle_name TEXT,
+  last_name TEXT,
+  uga_email TEXT,
+  personal_email TEXT,
+  phone TEXT,
+  mentor_id TEXT,
+  uga_class TEXT,
+  shirt_size TEXT,
+  gender TEXT,
+  submitted_at TIMESTAMPTZ,
+  raw_data JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- JOTFORM SETUP RAW
+CREATE TABLE IF NOT EXISTS jotform_setup_raw (
+  submission_id TEXT PRIMARY KEY,
+  email TEXT,
+  phone TEXT,
+  submitted_at TIMESTAMPTZ,
+  raw_data JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- GIVEBUTTER MEMBERS RAW
+CREATE TABLE IF NOT EXISTS givebutter_members_raw (
+  member_id INTEGER PRIMARY KEY,
+  campaign_id TEXT,
+  first_name TEXT,
+  last_name TEXT,
+  display_name TEXT,
+  email TEXT,
+  phone TEXT,
+  goal DECIMAL,
+  raised DECIMAL,
+  donors INTEGER,
+  items INTEGER,
+  member_url TEXT,
+  picture TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- GIVEBUTTER CONTACTS RAW (from CSV export)
+CREATE TABLE IF NOT EXISTS givebutter_contacts_raw (
+  contact_id INTEGER PRIMARY KEY,
+  first_name TEXT,
+  last_name TEXT,
+  primary_email TEXT,
+  primary_phone TEXT,
+  tags TEXT[],
+  custom_fields JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 -- ============================================================================
 -- LAYER 2: MAIN MENTORS TABLE (comprehensive, real table)

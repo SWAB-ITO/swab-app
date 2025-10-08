@@ -12,7 +12,7 @@ import { resolve } from 'path';
 
 // Load .env.local (Next.js convention)
 dotenv.config({ path: resolve(process.cwd(), '.env.local') });
-import { getSupabaseConfig, getSupabaseEnv, isUsingLocalSupabase } from '../config/supabase';
+import { getSupabaseConfig, getSupabaseEnv, isUsingLocalSupabase } from './config/supabase';
 
 function checkEnv() {
   console.log('\n' + '='.repeat(80));

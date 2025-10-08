@@ -31,6 +31,7 @@ npm run dev     # http://localhost:3000
 
 - **[docs/GUIDE.md](docs/GUIDE.md)** - How the system works
 - **[docs/ISSUES.md](docs/ISSUES.md)** - Current data issues & fixes
+- **[docs/TEXT_CAMPAIGNS.md](docs/TEXT_CAMPAIGNS.md)** - Send text messages to mentors
 - **[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)** - Adding new features
 
 ---
@@ -41,6 +42,10 @@ npm run dev     # http://localhost:3000
 # Pipeline
 npm run sync    # Pull from APIs → raw tables
 npm run etl     # Process raw → main tables
+
+# Text Messaging
+npm run text:export     # Export mentors to Givebutter CSV
+npm run text:validate   # Validate CSV before import
 
 # Database
 npm run db:start    # Start Supabase

@@ -21,25 +21,30 @@
 
 ```
 lib/
-├── pipeline/          # ONLY data pipeline code
-│   ├── sync/         # LAYER 1: APIs → Raw tables
-│   └── etl/          # LAYER 2: Raw → Main tables
-├── admin/            # ONLY maintenance & API writes
-│   ├── givebutter/   # Grouped by service
-│   └── jotform/      # (future)
-└── config/           # ONLY configuration
-    └── supabase.ts
+├── admin/                    # Baseline infrastructure
+│   ├── pipeline/
+│   │   ├── sync/           # LAYER 1: APIs → Raw tables
+│   │   └── etl/            # LAYER 2: Raw → Main tables
+│   ├── config/             # Configuration
+│   │   └── supabase.ts
+│   └── utils/              # Utilities (Supabase clients, etc.)
+├── givebutter/              # Givebutter operations (DB → Givebutter API)
+├── jotform/                 # Jotform operations (DB → Jotform API)
+└── [feature]/               # Feature-specific folders (e.g., text-messages/)
+    ├── givebutter/         # Feature scripts for Givebutter
+    └── jotform/            # Feature scripts for Jotform
 
-app/                   # ONLY Next.js frontend
-├── (routes)/         # Page routes
-└── components/       # React components
+app/                         # ONLY Next.js frontend
+├── (routes)/               # Page routes
+└── components/             # React components
 ```
 
 **Key Rules:**
-1. **Pipeline scripts** = Read-only from APIs, write to database
-2. **Admin scripts** = Write to external APIs (Givebutter, Jotform)
-3. **Frontend** = Read from database, display to users
-4. **Never mix concerns** - Each folder has ONE job
+1. **admin/pipeline/** = Baseline data pipeline (APIs → Raw → Main)
+2. **givebutter/**, **jotform/** = Operations that write TO external APIs from DB
+3. **[feature]/** = Feature-specific logic (e.g., text-messages/) with service subfolders
+4. **Frontend** = Read from database, display to users
+5. **Never mix concerns** - Each folder has ONE job
 
 ---
 
@@ -51,7 +56,7 @@ app/                   # ONLY Next.js frontend
 
 **1. Create sync script:**
 ```
-lib/pipeline/sync/stripe-payments.ts
+lib/admin/pipeline/sync/stripe-payments.ts
 ```
 
 **2. Follow this template:**
@@ -111,12 +116,12 @@ import './stripe-payments';
 
 **5. Add npm script:**
 ```json
-"sync:stripe-payments": "tsx lib/pipeline/sync/stripe-payments.ts"
+"sync:stripe-payments": "tsx lib/admin/pipeline/sync/stripe-payments.ts"
 ```
 
 **6. Update ETL to process new data:**
 ```typescript
-// In lib/pipeline/etl/process.ts
+// In lib/admin/pipeline/etl/process.ts
 const { data: rawPayments } = await supabase
   .from('stripe_payments_raw')
   .select('*');
@@ -146,7 +151,7 @@ CREATE TABLE mentor_payments (
 
 **2. Update ETL process:**
 ```typescript
-// In lib/pipeline/etl/process.ts
+// In lib/admin/pipeline/etl/process.ts
 
 // After processing mentors, process payments
 for (const payment of rawPayments) {
@@ -181,7 +186,7 @@ await supabase.from('mentor_payments').upsert(mentorPayments);
 
 **1. Create admin script:**
 ```
-lib/admin/givebutter/create-missing-contacts.ts
+lib/givebutter/create-missing-contacts.ts
 ```
 
 **2. Follow this template:**
@@ -252,7 +257,7 @@ createMissingContacts(applyChanges);
 
 **3. Add npm script:**
 ```json
-"admin:gb:create-missing": "tsx lib/admin/givebutter/create-missing-contacts.ts"
+"admin:gb:create-missing": "tsx lib/givebutter/create-missing-contacts.ts"
 ```
 
 **4. Always include dry run:**
@@ -289,7 +294,7 @@ app/dashboard/page.tsx
 
 **2. Follow this template:**
 ```typescript
-import { createClient } from '@/lib/utils/supabase/server';
+import { createClient } from '@/lib/admin/utils/supabase/server';
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -482,13 +487,13 @@ await Promise.all([
 
 ```
 ✅ Good:
-lib/pipeline/sync/jotform-signups.ts     (kebab-case)
-lib/admin/givebutter/clean-tags.ts       (kebab-case)
+lib/admin/pipeline/sync/jotform-signups.ts     (kebab-case)
+lib/givebutter/clean-tags.ts                   (kebab-case)
 app/components/MentorTable.tsx           (PascalCase for components)
 
 ❌ Bad:
-lib/pipeline/sync/JotformSignups.ts
-lib/admin/givebutter/CleanTags.ts
+lib/admin/pipeline/sync/JotformSignups.ts
+lib/givebutter/CleanTags.ts
 app/components/mentor-table.tsx
 ```
 
@@ -613,7 +618,7 @@ npm run [your-new-script]
 1. ❌ **Never modify raw tables** - They're untouched API dumps
 2. ❌ **Never mix pipeline and admin** - Clear separation of concerns
 3. ❌ **Never skip error handling** - Always log errors clearly
-4. ❌ **Never hardcode config** - Use `lib/config/supabase.ts`
+4. ❌ **Never hardcode config** - Use `lib/admin/config/supabase.ts`
 5. ❌ **Never commit without testing** - Run full pipeline first
 
 ---
@@ -621,9 +626,9 @@ npm run [your-new-script]
 ## Questions?
 
 See existing code for examples:
-- **Pipeline:** `lib/pipeline/sync/jotform-signups.ts`
-- **ETL:** `lib/pipeline/etl/process.ts`
-- **Admin:** `lib/admin/givebutter/consolidate-duplicates.ts`
+- **Pipeline:** `lib/admin/pipeline/sync/jotform-signups.ts`
+- **ETL:** `lib/admin/pipeline/etl/process.ts`
+- **Admin:** `lib/givebutter/consolidate-duplicates.ts`
 - **Frontend:** `app/page.tsx`
 
 Follow these patterns and the codebase stays clean! 🎯

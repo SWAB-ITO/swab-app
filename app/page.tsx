@@ -13,31 +13,31 @@ export default function Home() {
 
         <div className="mb-8 p-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-xl">
           <h2 className="text-2xl font-semibold mb-4">✅ Database Operational</h2>
-          <p className="text-lg mb-6"><strong>541 unique mentors</strong> successfully loaded and categorized</p>
+          <p className="text-lg mb-6"><strong>545 unique mentors</strong> successfully loaded and categorized</p>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
             <div className="bg-white dark:bg-neutral-800 p-4 rounded-lg border border-neutral-200 dark:border-neutral-700">
-              <div className="text-3xl font-bold text-green-600 dark:text-green-500">37</div>
+              <div className="text-3xl font-bold text-green-600 dark:text-green-500">0</div>
               <div className="text-sm text-neutral-600 dark:text-neutral-400">Fully Complete</div>
             </div>
             <div className="bg-white dark:bg-neutral-800 p-4 rounded-lg border border-neutral-200 dark:border-neutral-700">
-              <div className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">315</div>
+              <div className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">356</div>
               <div className="text-sm text-neutral-600 dark:text-neutral-400">Need Fundraising</div>
             </div>
             <div className="bg-white dark:bg-neutral-800 p-4 rounded-lg border border-neutral-200 dark:border-neutral-700">
-              <div className="text-3xl font-bold text-yellow-600 dark:text-yellow-500">27</div>
+              <div className="text-3xl font-bold text-yellow-600 dark:text-yellow-500">28</div>
               <div className="text-sm text-neutral-600 dark:text-neutral-400">Need Page</div>
             </div>
             <div className="bg-white dark:bg-neutral-800 p-4 rounded-lg border border-neutral-200 dark:border-neutral-700">
-              <div className="text-3xl font-bold text-orange-600 dark:text-orange-500">162</div>
+              <div className="text-3xl font-bold text-orange-600 dark:text-orange-500">164</div>
               <div className="text-sm text-neutral-600 dark:text-neutral-400">Need Setup</div>
             </div>
           </div>
 
           <div className="text-sm text-neutral-600 dark:text-neutral-400 space-y-1">
-            <p>💰 $5,991 raised of $42,823 goal (14.0%)</p>
-            <p>⚡ CSV processing: 95,778 rows/sec</p>
-            <p>🎯 Deduplication: 12 duplicates removed → 541 unique mentors</p>
+            <p>⚡ 3-layer data pipeline (Raw → ETL → Main)</p>
+            <p>🎯 Deduplication: 12 duplicates removed → 545 unique mentors</p>
+            <p>📊 Pipeline: 95k rows/sec CSV processing</p>
           </div>
         </div>
 
