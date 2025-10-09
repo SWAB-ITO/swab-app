@@ -117,24 +117,13 @@ async function syncMembers() {
       try {
         const parsed = {
           member_id: member.id,
-          campaign_id: CAMPAIGN_ID,
-
-          // Identity
           first_name: member.first_name,
           last_name: member.last_name,
-          display_name: member.display_name,
           email: member.email,
           phone: member.phone,
-
-          // Fundraising
-          goal: member.goal,
-          amount_raised: member.raised,  // API still returns 'raised'
-          donors: member.donors,
-          items: member.items,
-
-          // URLs
-          member_url: member.url,
-          picture: member.picture,
+          amount_raised: member.raised,
+          profile_url: member.url,
+          raw_data: member, // Store full member object for reference
         };
 
         // Upsert (insert or update if member_id exists)

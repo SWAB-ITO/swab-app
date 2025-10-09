@@ -91,8 +91,13 @@ backend/
 
 supabase/migrations/         # Database schema migrations
 docs/                        # Documentation
-app/                         # Next.js app router pages
-components/                  # React components
+src/                         # Frontend application
+├── app/                     # Next.js app router pages
+├── components/              # React components
+│   ├── layout/              # Navigation components
+│   ├── providers/           # Context providers
+│   └── ui/                  # Reusable UI components
+└── lib/                     # Frontend utilities
 ```
 
 ---
@@ -298,8 +303,9 @@ const additionalEmail = mentor.personal_email ? mentor.uga_email : null;
 ✅ Good:
 backend/core/sync/jotform-signups.ts     (kebab-case)
 backend/lib/operations/givebutter/consolidate-duplicates.ts
-lib/supabase/client.ts
-components/MentorTable.tsx                    (PascalCase for React components)
+src/components/layout/top-nav.tsx            (kebab-case)
+src/components/ui/Button.tsx                 (PascalCase for React components)
+src/lib/utils.ts                             (kebab-case)
 
 ❌ Bad:
 backend/core/sync/JotformSignups.ts

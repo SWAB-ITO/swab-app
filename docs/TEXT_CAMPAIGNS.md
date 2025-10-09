@@ -121,7 +121,7 @@ npm run text:export
 npm run text:export -- changed
 ```
 
-**Output:** `data/givebutter-import-YYYY-MM-DD.csv`
+**Output:** `backend/data/givebutter-import-YYYY-MM-DD.csv`
 
 **What's included:**
 - All mentor contact info (name, email, phone)
@@ -187,7 +187,7 @@ After import completes, pull updated contacts back to database:
 # Contacts → Export → Download CSV
 
 # Replace old CSV
-mv ~/Downloads/givebutter-contacts-*.csv data/givebutter-contacts-export.csv
+mv ~/Downloads/givebutter-contacts-*.csv backend/data/givebutter-contacts-export.csv
 
 # Re-sync
 npm run sync:givebutter-contacts

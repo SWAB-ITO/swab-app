@@ -297,7 +297,7 @@ npm run text:preview
    ```
 
 6. **Import to Givebutter:**
-   - Upload `data/givebutter-import-2025-01-08.csv`
+   - Upload `backend/data/givebutter-import-2025-01-08.csv`
 
 7. **Send texts:**
    - Engage → Texts → Filter by "needs_fundraising" → Send
@@ -321,8 +321,8 @@ npm run text:preview
 - Config structure is UI-friendly (campaigns, templates, variables)
 
 **To add UI:**
-1. Create Next.js page: `app/messages/page.tsx`
-2. Fetch config via API route: `app/api/messages/config/route.ts`
+1. Create Next.js page: `src/app/messages/page.tsx`
+2. Fetch config via API route: `src/app/api/messages/config/route.ts`
 3. Display in form editor
 4. Save updates back to JSON (or migrate to database)
 5. Call `npm run etl` via API route after save

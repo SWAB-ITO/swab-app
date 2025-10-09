@@ -23,22 +23,62 @@ DROP TABLE IF EXISTS givebutter_sync_log CASCADE;
 DROP TABLE IF EXISTS givebutter_custom_fields CASCADE;
 
 -- ============================================================================
--- STEP 2: RENAME RAW TABLES
+-- STEP 2: CREATE RAW TABLES
 -- ============================================================================
 
--- Jotform signups
-ALTER TABLE jotform_signups_raw RENAME TO mn_signups_raw;
-ALTER TABLE mn_signups_raw RENAME COLUMN mentor_id TO mn_id;
+-- Jotform signups raw table
+CREATE TABLE IF NOT EXISTS mn_signups_raw (
+  submission_id TEXT PRIMARY KEY,
+  prefix TEXT,
+  first_name TEXT,
+  middle_name TEXT,
+  last_name TEXT,
+  uga_email TEXT,
+  personal_email TEXT,
+  phone TEXT,
+  mn_id TEXT,
+  uga_class TEXT,
+  shirt_size TEXT,
+  gender TEXT,
+  submitted_at TIMESTAMPTZ,
+  raw_data JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
--- Jotform setup
-ALTER TABLE jotform_setup_raw RENAME TO funds_setup_raw;
+-- Jotform setup raw table
+CREATE TABLE IF NOT EXISTS funds_setup_raw (
+  submission_id TEXT PRIMARY KEY,
+  email TEXT,
+  phone TEXT,
+  submitted_at TIMESTAMPTZ,
+  raw_data JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
--- Givebutter members (will be relationally connected after mentors table exists)
-ALTER TABLE givebutter_members_raw RENAME TO campaign_members_raw;
-ALTER TABLE campaign_members_raw RENAME COLUMN raised TO amount_raised;
+-- Givebutter members raw table
+CREATE TABLE IF NOT EXISTS campaign_members_raw (
+  member_id INTEGER PRIMARY KEY,
+  first_name TEXT,
+  last_name TEXT,
+  email TEXT,
+  phone TEXT,
+  amount_raised DECIMAL DEFAULT 0,
+  profile_url TEXT,
+  raw_data JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
--- Givebutter contacts (full export, not relationally connected)
-ALTER TABLE givebutter_contacts_raw RENAME TO full_gb_contacts;
+-- Givebutter contacts full export table
+CREATE TABLE IF NOT EXISTS full_gb_contacts (
+  contact_id INTEGER PRIMARY KEY,
+  first_name TEXT,
+  last_name TEXT,
+  primary_email TEXT,
+  primary_phone TEXT,
+  tags TEXT[],
+  custom_fields JSONB,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 -- ============================================================================
 -- STEP 3: CREATE NEW MENTORS TABLE
@@ -278,11 +318,11 @@ $$ LANGUAGE plpgsql;
 -- NOTES
 -- ============================================================================
 -- After running this migration:
--- 1. Raw tables renamed: mn_signups_raw, funds_setup_raw, campaign_members_raw (FK to mentors), full_gb_contacts
+-- 1. Raw tables created: mn_signups_raw, funds_setup_raw, campaign_members_raw (FK to mentors), full_gb_contacts
 -- 2. Main tables: mentors (mn_id PK, gb_contact_id, gb_member_id), mn_tasks, mn_errors
 -- 3. Utility table: mn_gb_import (simplified Givebutter import with only required/edited fields)
 -- 4. mentor_texts merged into mentors (status_category, status_text)
--- 5. Deleted: givebutter_custom_fields, givebutter_sync_log
+-- 5. Deleted: givebutter_custom_fields, givebutter_sync_log (if they existed)
 -- 6. campaign_members_raw now relationally connected via mn_id FK
 -- 7. Run: npm run sync && npm run etl
 -- ============================================================================

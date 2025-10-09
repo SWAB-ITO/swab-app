@@ -140,8 +140,7 @@ interface Mentor {
   first_name: string;
   middle_name?: string;
   last_name: string;
-  preferred_name?: string;
-  display_name: string;
+  preferred_name: string;
   full_name: string;
   personal_email?: string;
   uga_email?: string;
@@ -318,11 +317,35 @@ async function etlProcess() {
 
     if (!existing || (signup.submitted_at && existing.submitted_at && signup.submitted_at > existing.submitted_at)) {
       if (existing) {
-        duplicates.push(`${existing.mn_id} (older) vs ${signup.mn_id} (newer, kept)`);
+        const dupMsg = `${existing.mn_id} (older) vs ${signup.mn_id} (newer, kept)`;
+        duplicates.push(dupMsg);
+
+        // Log to errors
+        errors.push({
+          mn_id: existing.mn_id,
+          phone: normPhone,
+          error_type: 'duplicate_signup',
+          error_message: `Duplicate signup detected: ${dupMsg}. Kept most recent submission.`,
+          severity: 'warning',
+          source_table: 'mn_signups_raw',
+          raw_data: { kept: signup.submission_id, discarded: existing.submission_id },
+        });
       }
       phoneToSignup.set(normPhone, signup);
     } else {
-      duplicates.push(`${signup.mn_id} (older) vs ${existing.mn_id} (newer, kept)`);
+      const dupMsg = `${signup.mn_id} (older) vs ${existing.mn_id} (newer, kept)`;
+      duplicates.push(dupMsg);
+
+      // Log to errors
+      errors.push({
+        mn_id: signup.mn_id,
+        phone: normPhone,
+        error_type: 'duplicate_signup',
+        error_message: `Duplicate signup detected: ${dupMsg}. Kept most recent submission.`,
+        severity: 'warning',
+        source_table: 'mn_signups_raw',
+        raw_data: { kept: existing.submission_id, discarded: signup.submission_id },
+      });
     }
   });
 
@@ -356,9 +379,14 @@ async function etlProcess() {
     }
 
     // Name logic
-    const preferredName = signup.prefix?.trim() || null;
-    const firstName = signup.first_name || (preferredName || 'Unknown');
-    const displayName = preferredName || firstName;
+    // Legal names from Jotform
+    const firstName = signup.first_name || 'Unknown';
+    const middleName = signup.middle_name || undefined;
+    const lastName = signup.last_name || 'Unknown';
+
+    // Preferred name: use prefix if they specified one, otherwise use first_name
+    const preferredName = signup.prefix?.trim() || firstName;
+
     const fullName = buildFullName(signup);
 
     // Match to Givebutter contact (phone first, then email)
@@ -460,10 +488,9 @@ async function etlProcess() {
       gb_member_id: gbMemberId,
 
       first_name: firstName,
-      middle_name: signup.middle_name,
-      last_name: signup.last_name || 'Unknown',
-      preferred_name: preferredName || undefined,
-      display_name: displayName,
+      middle_name: middleName,
+      last_name: lastName,
+      preferred_name: preferredName,
       full_name: fullName,
 
       personal_email: signup.personal_email,
@@ -647,7 +674,7 @@ async function etlProcess() {
       mn_id: mentor.mn_id,
       'Givebutter Contact ID': mentor.gb_contact_id?.toString() || null,
       'Contact External ID': mentor.mn_id,
-      'Prefix': mentor.preferred_name || mentor.first_name,
+      'Prefix': mentor.preferred_name,
       'First Name': mentor.first_name,
       'Middle Name': mentor.middle_name || null,
       'Last Name': mentor.last_name,

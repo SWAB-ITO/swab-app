@@ -1,0 +1,2893 @@
+# Mentor Database Sync Architecture
+
+**Last Updated:** October 8, 2025
+**Status:** Architecture Design - Pre-Implementation
+
+---
+
+## Table of Contents
+
+1. [Executive Summary](#executive-summary)
+2. [Problem Space & Context](#problem-space--context)
+3. [Three-Tier Sync Architecture](#three-tier-sync-architecture)
+4. [Database Schema](#database-schema)
+5. [Data Flow Scenarios](#data-flow-scenarios)
+6. [CSV Upload & Contact Matching](#csv-upload--contact-matching)
+7. [Contact Sync via API](#contact-sync-via-api)
+8. [Conflict Detection & Resolution](#conflict-detection--resolution)
+9. [Edge Cases & Solutions](#edge-cases--solutions)
+10. [API Endpoints](#api-endpoints)
+11. [UI Organization](#ui-organization)
+12. [Implementation Phases](#implementation-phases)
+13. [Key Design Decisions](#key-design-decisions)
+
+---
+
+## Executive Summary
+
+### System Purpose
+This system tracks mentors for SWAB's annual event day, consolidating data from:
+- **Jotform** (signup & setup forms)
+- **Givebutter** (fundraising campaign)
+
+The system maintains internal state while syncing bidirectionally with Givebutter's contact database.
+
+### Core Challenge
+Givebutter's API has severe limitations:
+- Members API provides `member_id` but **NOT** `contact_id`
+- The only way to recieve contacts is to fetch all contcts at once which for us is over 40k contacts which makes syncing impossible
+- No way to query/search contacts by phone or email
+- No way to update custom fields via API
+- All campaign members are contacts, but not all contacts are campaign members
+
+**Result:** Full CSV exports of all givebutter contacts from within the web UI are necessary for contact ID discovery and full contact data access.
+
+### Architectural Solution: Three-Tier Sync
+
+1. **Initial Setup** (one-time): API sync + CSV upload + contact matching
+2. **Periodic Sync** (automated): API-only baseline sync
+3. **Feature Operations** (manual): Full exported CSV-dependent workflows
+
+This architecture separates:
+- Continuous automated data refresh (no CSV)
+- Contact ID discovery and Givebutter integration (requires CSV)
+- Feature-specific operations (text campaigns, exports, duplicates)
+
+---
+
+## Problem Space & Context
+
+### Givebutter API Limitations
+
+#### What It Doesn't Provide
+- **Contact ID from members endpoint** - You can't get contact_id when fetching members
+- **Search/query by identifiers** - No way to find a contact by phone/email
+- **Bulk contact operations** - Must fetch individually by contact_id
+- **Custom field updates** - Read-only via API
+
+#### Members vs Contacts Distinction
+
+**Key Insight:** All campaign members are contacts, but not all contacts are campaign members.
+
+```
+Givebutter Database:
+├─ Contacts (40,000+)
+│   ├─ Campaign Members (490)  ← Have member_id AND contact_id
+│   ├─ Past mentors (200)      ← contact_id only
+│   ├─ Donors (35,000+)        ← contact_id only
+│   └─ Other (5,000+)          ← contact_id only
+```
+
+**Problem:** When we fetch members via API, we get their member data but can't update it if we make changes via API
+
+**Solution:** CSV export contains BOTH member_id and contact_id, allowing us to establish the mapping.
+
+### Why CSV is Necessary
+
+#### Use Case 1: Contact ID Discovery
+```
+Flow without CSV:
+1. Mentor signs up → Jotform
+2. Creates fundraising page → becomes campaign member
+3. We fetch all members → find member_id, amount raised
+4. ❌ Can't get contact_id because it is not included
+
+Flow with CSV:
+1-3. Same as above
+4. Upload CSV → contains both member_id and contact_id
+5. Match member to contact → store contact_id
+6. ✅ Can now update contact via API using contact_id
+```
+
+#### Use Case 2: Returning Mentors
+```
+Scenario: Mentor from 2024 signs up for 2025
+
+Without CSV:
+- Appears as "new" mentor
+- No way to know they have existing Givebutter contact from 2024 or not that can be updated for 2025 and no way to check without having their contact ID
+- Risk of duplicate contact creation which is a nightmare in the web UI for many operations
+
+With CSV:
+- CSV contains all contacts (including 2024 mentors)
+- Match by phone/email → find existing contact
+- Link to existing contact_id → avoid duplicates
+```
+
+#### Use Case 3: Custom Field Sync
+```
+Givebutter Contact Custom Fields:
+- "📝 Sign Up Complete"
+- "💸 Givebutter Page Setup"
+- "📆 Shift Preference"
+- etc.
+
+API Limitations:
+- ❌ Can't update custom fields via API
+- ✅ Can READ custom fields via GET /contacts/{id}
+- ✅ Can import CSV with custom field updates
+
+Strategy:
+1. Generate export CSV from our data
+2. User uploads to Givebutter → updates custom fields
+3. Download fresh CSV → upload to our system
+4. Now we can read updated custom fields via API
+```
+
+### The CSV Feedback Loop
+
+This is the critical workflow that closes the gap:
+
+```
+Our System                    Givebutter
+    │                              │
+    │  1. Generate mn_gb_import with logic & verification from tables    │
+    ├──────────────────────────────┤
+    │     (555 mentors)            │
+    │                              │
+    │  2. User downloads CSV       │
+    │◄─────────────────────────────┤
+    │                              │
+    │  3. User uploads to GB       │
+    ├─────────────────────────────►│
+    │                              │
+    │                         Creates new contacts where there are no ids
+    │                         Merges contact_id's of uploaded contacts with old contacts that update their state
+    │                              │
+    │  4. User downloads Full contact CSV    │
+    │◄─────────────────────────────┤
+    │     (now with contact_ids of new members as well)   │
+    │                              │
+    │  5. Upload to our system     │
+    │  6. Extract contact_ids      │
+    │  7. Store on mentor records  │
+    │                              │
+    │  8. Now can sync via API     │
+    │◄────────────────────────────►│
+         GET /contacts/{id}
+```
+
+**Why This Matters:** New mentors won't have contact_ids until after first CSV export → import → re-upload cycle.
+
+---
+
+## Three-Tier Sync Architecture
+
+### Architecture Overview
+
+| Tier | Name | Frequency | CSV Required? | Purpose |
+|------|------|-----------|---------------|---------|
+| 1 | Initial Setup | Once per year | ✅ Mandatory | Bootstrap system with historical data |
+| 2 | Periodic Sync | Hourly/Daily | ❌ API-only | Keep internal state fresh |
+| 3 | Feature Ops | As needed | ✅ Per-operation | CSV-dependent workflows |
+
+### Tier 1: Initial Setup (Initialization)
+
+**When:** First-time setup or start of new year (e.g., September 2025)
+
+**Purpose:** Bootstrap the system with:
+- Current year mentor signups
+- Previous year mentor contacts (for returning mentor detection)
+- Establish contact_id mappings
+
+**Flow:**
+```
+Settings Page → "Initialize System" Wizard
+
+Step 1: Configure API Keys
+├─ Jotform API key
+├─ Jotform signup form ID
+├─ Jotform setup form ID
+├─ Givebutter API key
+└─ Givebutter campaign code
+
+Step 2: Run Initial API Sync
+├─ Fetch Jotform signups → mn_signups_raw
+├─ Fetch Jotform setup → funds_setup_raw
+├─ Fetch Givebutter members → campaign_members_raw
+└─ Run ETL → mentors, mn_tasks, mn_errors, mn_gb_import
+    Result: 555 mentors imported (no contact_ids yet)
+
+Step 3: Upload Givebutter CSV (REQUIRED)
+├─ User downloads full export from Givebutter (40k+ contacts)
+├─ Uploads CSV to our system
+├─ Parse all 58 columns → full_gb_contacts table
+├─ Match contacts to mentors (phone → email → member_id)
+├─ Extract contact_ids → update mentors.gb_contact_id
+└─ Store mentor contacts → mn_gb_contacts_raw table
+    Result: 450/555 mentors matched to existing contacts
+
+Step 4: Initialization Complete
+├─ System status: ✅ Initialized
+├─ Coverage: 450/555 mentors have contact_ids (81%)
+├─ Duplicates detected: 12 (logged to mn_errors)
+└─ Ready for periodic sync and feature operations
+
+Step 5: Repeat Givebutter CSV Upload(REQUIRED)
+├─ User downloads full export from Givebutter (40k+ contacts) which should include the new ids we need to make the system work given we cannot retrieve the newly made contact IDS
+├─ Uploads CSV to our system
+├─ Parse all 58 columns → full_gb_contacts table
+├─ ...
+└─ Store mentor contacts → mn_gb_contacts_raw table
+```
+
+**Logged As:** `sync_type = 'initialization'`
+
+**Why CSV is Mandatory Here:**
+- Need to match returning mentors to existing contacts
+- Need to capture contact_ids for bidirectional sync
+- Need to detect duplicates in Givebutter
+- Without this, we'd create duplicate contacts for all returning mentors that have already signed up before resyncing for the first time
+
+### Tier 2: Periodic Sync (Automated Baseline)
+
+**When:** Configurable schedule (e.g., every 6 hours)
+
+**Trigger:** Automated cron OR manual "Run Sync Now" button
+
+**Purpose:** Keep internal mentor state fresh from API sources
+
+**Flow:**
+```
+1. Fetch Jotform Signups
+   GET /form/{signup_form_id}/submissions
+   → UPSERT mn_signups_raw
+
+2. Fetch Jotform Setup
+   GET /form/{setup_form_id}/submissions
+   → UPSERT funds_setup_raw
+
+3. Fetch Givebutter Members
+   GET /campaigns/{campaign_id}/members (paginated)
+   → UPSERT campaign_members_raw
+
+4. Run ETL Process
+   ├─ Load all raw tables
+   ├─ Validate mn_id presence
+   ├─ Deduplicate by phone
+   ├─ Match across sources
+   ├─ Compute status
+   ├─ Detect conflicts
+   └─ UPSERT mentors, mn_tasks, mn_errors, mn_gb_import
+
+5. Sync Givebutter Contacts via API
+   FOR EACH mentor WHERE gb_contact_id IS NOT NULL:
+     ├─ GET /contacts/{gb_contact_id}
+     ├─ UPSERT mn_gb_contacts_raw
+     ├─ Compare with mentor table → detect conflicts
+     └─ Sync back custom field updates (preferred name, etc.)
+
+6. Update Sync Log
+   └─ Record statistics, duration, errors
+```
+
+**Does NOT:**
+- Touch `full_gb_contacts` (full CSV table)
+- Require user intervention
+- Perform contact matching (already done in init)
+- Generate exports (on-demand only)
+
+**Logged As:** `sync_type = 'automated'` or `'manual'`
+
+**Why No CSV:**
+- Contact_ids already established during initialization
+- Can fetch contact data via API using stored contact_ids
+- CSV upload is for ID discovery, not continuous sync
+
+### Tier 3: Feature Operations (Manual)
+
+**When:** User-initiated for specific tasks
+
+**Trigger:** User clicks feature-specific buttons
+
+**Purpose:** Operations that depend on fresh CSV data
+
+**Examples:**
+
+#### Feature: Generate Contact Import CSV
+```
+Mentors Page → "Generate Contact Import"
+├─ Check mn_gb_contacts_raw freshness
+├─ If stale (>24h) → warn "Upload fresh CSV first"
+├─ Generate CSV from mn_gb_import table
+└─ Download to user
+```
+
+#### Feature: Text Message Message
+```
+Communications Page → "New Text Message"
+├─ Check mn_gb_contacts_raw freshness
+├─ If stale → warn "Upload fresh CSV first"
+├─ User selects filters (status, shift, etc.)
+├─ Generate filtered export
+└─ Download SMS platform CSV
+```
+
+#### Feature: CSV Upload from Full Export
+```
+Mentors Page → "Import Latest CSV"
+├─ User downloads fresh Givebutter export
+├─ Uploads to our system
+├─ Parse CSV → upsert full_gb_contacts
+├─ Match contacts to mentors
+├─ Extract NEW contact_ids (feedback loop!)
+├─ Update mn_gb_contacts_raw
+└─ Show results:
+    - 15 new contact_ids captured
+    - 3 conflicts detected
+    - CSV age: 0.5 hours
+```
+
+**Logged As:** `sync_type = 'feature_csv_upload'`, `'feature_export'`, etc.
+
+**Why CSV Sometimes:**
+- Capture new contact_ids after import to Givebutter
+- Ensure export data is current before generating CSVs
+- Validate no conflicts before text campaigns
+
+---
+
+## Database Schema
+
+### Overview
+
+```
+Raw Data Tables (External sources): {Note the naming here might be inconsistent with the rest. The ones here are correctly edited by a human}
+├─ raw_mn_signups         (Jotform signup form)
+├─ raw_mn_funds_setup        (Jotform setup form)
+├─ raw_gb_campaign_members    (Givebutter members API)
+├─ raw_gb_full_contacts        (Givebutter full CSV export - 40k+)
+└─ raw_mn_gb_contacts      (Givebutter mentor contacts only for future API reading & syncing - 555 max)
+
+Main Tables (Our source of truth):
+└─ mentors                 (Unified mentor records)
+
+
+Mentor Feature/Support Tables
+├─ mn_tasks                (Task tracking & status)
+└─ mn_texts                (This is a Caleb additon but would it work? I need to work on the first text message ASAP)
+
+Export Table (Staged data):
+└─ mn_gb_import            (Prepared for Givebutter import)
+
+Metadata Tables:
+├─ mn_errors               (Conflict & error logging)
+├─ sync_config             (API configuration)
+├─ sync_log                (Sync history)
+└─ csv_import_log          (CSV upload tracking)
+```
+
+### Table: `mentors`
+
+**Purpose:** Single source of truth for mentor identity and status
+
+**Populated By:** ETL process (from raw tables)
+
+**Primary Key:** `mn_id` (from Jotform, digits only)
+
+```sql
+CREATE TABLE mentors (
+  -- PRIMARY KEY (from Jotform)
+  mn_id TEXT PRIMARY KEY,
+
+  -- ALTERNATE KEYS (for matching/lookups)
+  phone TEXT UNIQUE NOT NULL,           -- +1XXXXXXXXXX (E.164 format)
+  gb_contact_id INTEGER UNIQUE,         -- From full_gb_contacts or API
+  gb_member_id INTEGER UNIQUE,          -- From campaign_members_raw
+
+  -- IDENTITY (from Jotform signup)
+  first_name TEXT NOT NULL,             -- Legal first name
+  middle_name TEXT,                     -- Legal middle name
+  last_name TEXT NOT NULL,              -- Legal last name
+  preferred_name TEXT NOT NULL,         -- What they go by (prefix OR first_name)
+  full_name TEXT NOT NULL,              -- Complete display name
+
+  -- CONTACT (from Jotform)
+  personal_email TEXT,                  -- PRIMARY (better deliverability)
+  uga_email TEXT,                       -- SECONDARY (UGA blocks some emails)
+
+  -- DEMOGRAPHICS (from Jotform)
+  gender TEXT,
+  shirt_size TEXT,
+  uga_class TEXT,
+
+  -- PREFERENCES (from Jotform - future fields)
+  shift_preference TEXT,                -- Option 1-4
+  partner_preference INTEGER,           -- Ranking number
+
+  -- STATUS (computed from mn_tasks)
+  status_category TEXT,                 -- needs_setup | needs_page | needs_fundraising | complete
+  status_text TEXT,                     -- Auto-generated status message
+
+  -- RELATIONAL (traceability to raw sources)
+  signup_submission_id TEXT REFERENCES mn_signups_raw(submission_id),
+  setup_submission_id TEXT REFERENCES funds_setup_raw(submission_id),
+
+  -- METADATA
+  signup_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Key Design Decisions:**
+
+1. **preferred_name always populated**: Uses `prefix` from Jotform if specified, otherwise copies `first_name`. Every mentor must have a preferred name.
+
+2. **removed display_name field**: Redundant with preferred_name. Use preferred_name for all display purposes.
+
+3. **gb_contact_id nullable**: May not exist until CSV matching. New mentors won't have contact_id until after first export → import → CSV upload cycle.
+
+4. **phone is source of truth**: Normalized to E.164 format. Used for deduplication and matching.
+
+### Table: `mn_tasks`
+
+**Purpose:** Track mentor progress through onboarding steps
+
+**Relationship:** 1:1 with mentors
+
+```sql
+CREATE TABLE mn_tasks (
+  mn_id TEXT PRIMARY KEY REFERENCES mentors(mn_id),
+
+  -- SIGNUP (from mn_signups_raw)
+  signup_done BOOLEAN DEFAULT FALSE,
+  signup_at TIMESTAMPTZ,
+
+  -- SETUP FORM (from funds_setup_raw)
+  setup_done BOOLEAN DEFAULT FALSE,
+  setup_at TIMESTAMPTZ,
+
+  -- CAMPAIGN MEMBERSHIP (from campaign_members_raw)
+  campaign_member BOOLEAN DEFAULT FALSE,
+  campaign_joined_at TIMESTAMPTZ,        -- Not tracked by GB API (always null)
+
+  -- FUNDRAISING (from campaign_members_raw)
+  amount_raised NUMERIC DEFAULT 0,
+  fundraised_done BOOLEAN DEFAULT FALSE,  -- amount_raised >= 75
+  fundraised_at TIMESTAMPTZ,             -- Not tracked (always null)
+
+  -- TRAINING (manual admin update)
+  training_done BOOLEAN DEFAULT FALSE,
+  training_at TIMESTAMPTZ,
+
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Status Computation Logic:**
+```typescript
+if (fundraised_done && training_done)
+  → status = 'complete'
+else if (campaign_member && !fundraised_done)
+  → status = 'needs_fundraising'
+else if (setup_done && !campaign_member)
+  → status = 'needs_page'
+else
+  → status = 'needs_setup'
+```
+
+### Table: `raw_gb_full_contacts`
+
+**Purpose:** Store complete Givebutter CSV export (ALL contacts, not just mentors)
+
+**Row Count:** ~40,000 contacts
+
+**Updated:** Only during CSV upload (not continuous sync)
+
+**Linked to Mentors:** No direct FK (too many non-mentor contacts)
+
+```sql
+CREATE TABLE raw_gb_full_contacts (
+  -- PRIMARY IDENTIFIERS
+  contact_id INTEGER PRIMARY KEY,
+  external_id TEXT,                     -- Where we store mn_id for OUR contacts
+
+  -- NAME FIELDS
+  prefix TEXT,
+  first_name TEXT,
+  middle_name TEXT,
+  last_name TEXT,
+  suffix TEXT,
+
+  -- DEMOGRAPHICS
+  date_of_birth DATE,
+  gender TEXT,
+  employer TEXT,
+  title TEXT,
+
+  -- CONTACT INFO
+  primary_email TEXT,
+  additional_emails TEXT,
+  primary_phone TEXT,
+  additional_phones TEXT,
+
+  -- ADDRESS
+  address_line_1 TEXT,
+  address_line_2 TEXT,
+  city TEXT,
+  state TEXT,
+  postal_code TEXT,
+  country TEXT,
+  additional_addresses TEXT,
+
+  -- SOCIAL
+  website TEXT,
+  twitter TEXT,
+  linkedin TEXT,
+  facebook TEXT,
+
+  -- GIVEBUTTER METADATA
+  recurring_contributions TEXT,
+  total_contributions TEXT,
+  total_soft_credits TEXT,
+  engage_email_subscribed BOOLEAN,
+  engage_sms_subscribed BOOLEAN,
+  engage_mail_subscribed BOOLEAN,
+
+  -- ORGANIZATION
+  tags TEXT[],
+  notes TEXT,
+  household_id TEXT,
+  household TEXT,
+  household_primary_contact BOOLEAN,
+
+  -- TIMESTAMPS (from Givebutter)
+  date_created_utc TIMESTAMPTZ,
+  last_modified_utc TIMESTAMPTZ,
+
+  -- CUSTOM FIELDS (from custom-fields.json config)
+  custom_fields JSONB,                  -- All custom fields as JSON
+
+  -- OUR METADATA
+  csv_uploaded_at TIMESTAMPTZ DEFAULT NOW(),
+  csv_filename TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for matching
+CREATE INDEX idx_full_gb_contacts_phone ON full_gb_contacts(primary_phone);
+CREATE INDEX idx_full_gb_contacts_email ON full_gb_contacts(primary_email);
+CREATE INDEX idx_full_gb_contacts_external_id ON full_gb_contacts(external_id);
+```
+
+**Use Cases:**
+1. Initial contact matching during setup
+2. Duplicate detection (find all contacts with same phone/email)
+3. Re-matching if mentor info changes
+4. Historical reference ("what did GB look like at upload time?")
+
+**Not Used For:**
+- Continuous sync (use mn_gb_contacts_raw instead)
+- Export generation (use mn_gb_import instead)
+
+### Table: `mn_gb_contacts_raw`
+
+**Purpose:** Store ONLY mentor contacts, kept fresh via API
+
+**Row Count:** ~555 max (one per mentor)
+
+**Updated:** During periodic sync via API
+
+**Linked to Mentors:** Every row MUST have mn_id (1:1 relationship)
+
+```sql
+CREATE TABLE mn_gb_contacts_raw (
+  -- PRIMARY IDENTIFIERS
+  contact_id INTEGER PRIMARY KEY,
+  mn_id TEXT UNIQUE NOT NULL REFERENCES mentors(mn_id),  -- Always linked!
+  external_id TEXT,                     -- Should equal mn_id when properly synced
+
+  -- NAME FIELDS (58 total columns - same as full_gb_contacts)
+  prefix TEXT,
+  first_name TEXT,
+  middle_name TEXT,
+  last_name TEXT,
+  suffix TEXT,
+
+  -- DEMOGRAPHICS
+  date_of_birth DATE,
+  gender TEXT,
+  employer TEXT,
+  title TEXT,
+
+  -- CONTACT INFO
+  primary_email TEXT,
+  additional_emails TEXT,
+  primary_phone TEXT,
+  additional_phones TEXT,
+
+  -- ADDRESS
+  address_line_1 TEXT,
+  address_line_2 TEXT,
+  city TEXT,
+  state TEXT,
+  postal_code TEXT,
+  country TEXT,
+  additional_addresses TEXT,
+
+  -- SOCIAL
+  website TEXT,
+  twitter TEXT,
+  linkedin TEXT,
+  facebook TEXT,
+
+  -- GIVEBUTTER METADATA
+  recurring_contributions TEXT,
+  total_contributions TEXT,
+  total_soft_credits TEXT,
+  engage_email_subscribed BOOLEAN,
+  engage_sms_subscribed BOOLEAN,
+  engage_mail_subscribed BOOLEAN,
+
+  -- ORGANIZATION
+  tags TEXT[],
+  notes TEXT,
+  household_id TEXT,
+  household TEXT,
+  household_primary_contact BOOLEAN,
+
+  -- TIMESTAMPS (from Givebutter)
+  date_created_utc TIMESTAMPTZ,
+  last_modified_utc TIMESTAMPTZ,
+
+  -- CUSTOM FIELDS (dynamically from config)
+  custom_fields JSONB,                  -- Example fields:
+                                        -- "📝 Sign Up Complete": "Yes"
+                                        -- "💸 Givebutter Page Setup": "Yes"
+                                        -- "📆 Shift Preference": "Option 4"
+                                        -- "📱Custom Text Message 1️⃣": "..."
+
+  -- SYNC METADATA (our addition)
+  source TEXT CHECK (source IN ('csv_match', 'api_sync')),
+  gb_updated_at TIMESTAMPTZ,            -- From API or CSV "Last Modified (UTC)"
+  last_synced_at TIMESTAMPTZ DEFAULT NOW(),
+  sync_status TEXT CHECK (sync_status IN ('synced', 'conflict', 'stale')),
+
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes
+CREATE INDEX idx_mn_gb_contacts_raw_mn_id ON mn_gb_contacts_raw(mn_id);
+CREATE INDEX idx_mn_gb_contacts_raw_sync_status ON mn_gb_contacts_raw(sync_status);
+```
+
+**Populated By:**
+1. Initial CSV upload → matched contacts inserted with `source='csv_match'`
+2. Periodic sync → `GET /contacts/{contact_id}` → upsert with `source='api_sync'`
+
+**Use Cases:**
+1. Mirror of current Givebutter state for mentors
+2. Conflict detection (compare with `mentors` table)
+3. Export preparation (know what GB already has)
+4. Custom field sync-back (read GB updates)
+
+**Key Difference from full_gb_contacts:**
+- Only mentor contacts (not all 40k contacts)
+- Kept fresh via API (not just CSV uploads)
+- Always linked to mentors table (mn_id required)
+- Tracks sync status and conflicts
+
+### Table: `mn_gb_import`
+
+**Purpose:** Staged data prepared for Givebutter CSV import
+
+**Regenerated:** After every ETL run (cleared and rebuilt)
+
+**Format:** Exact Givebutter import CSV column names
+
+```sql
+CREATE TABLE mn_gb_import (
+  mn_id TEXT PRIMARY KEY REFERENCES mentors(mn_id),
+
+  -- Givebutter CSV Import Format (exact column names)
+  "Givebutter Contact ID" TEXT,         -- From mn_gb_contacts_raw (if exists)
+  "Contact External ID" TEXT,           -- mn_id
+  "Prefix" TEXT,                        -- preferred_name
+  "First Name" TEXT,                    -- from mentors
+  "Middle Name" TEXT,
+  "Last Name" TEXT,
+  "Suffix" TEXT,
+
+  "Date of Birth" TEXT,
+  "Gender" TEXT,
+  "Employer" TEXT,
+  "Title" TEXT,
+
+  "Primary Email" TEXT,                 -- personal_email OR uga_email
+  "Additional Emails" TEXT,             -- uga_email if personal exists
+  "Primary Phone" TEXT,                 -- normalized phone
+  "Additional Phones" TEXT,
+
+  "Address Line 1" TEXT,
+  "Address Line 2" TEXT,
+  "City" TEXT,
+  "State" TEXT,
+  "Postal Code" TEXT,
+  "Country" TEXT,
+  "Additional Addresses" TEXT,
+
+  "Website" TEXT,
+  "Twitter" TEXT,
+  "LinkedIn" TEXT,
+  "Facebook" TEXT,
+
+  "Tags" TEXT,                          -- Generated from status_category
+
+  "Notes" TEXT,
+
+  "Household ID" TEXT,
+  "Household" TEXT,
+  "Household Primary Contact" TEXT,
+
+  "Email Subscription Status" TEXT DEFAULT 'yes',
+  "Phone Subscription Status" TEXT DEFAULT 'yes',
+  "Address Subscription Status" TEXT DEFAULT 'yes',
+
+  -- Custom Fields (dynamically from custom-fields.json)
+  -- Examples:
+  "📝 Sign Up Complete" TEXT,           -- From mn_tasks.signup_done
+  "💸 Givebutter Page Setup" TEXT,      -- From mn_tasks.setup_done
+  "📆 Shift Preference" TEXT,           -- From mentors.shift_preference
+  "👯‍♂️ Partner Preference" TEXT,        -- From mentors.partner_preference
+  "🚂 Mentor Training Complete" TEXT,   -- From mn_tasks.training_done
+  "📈 Fully Fundraised?" TEXT,          -- From mn_tasks.fundraised_done
+  "📱Custom Text Message 1️⃣" TEXT,      -- Generated by MessageEngine
+
+  -- Metadata
+  needs_sync BOOLEAN DEFAULT TRUE,
+  last_exported_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Generation Logic:**
+```typescript
+// After ETL completes, regenerate mn_gb_import
+await db.delete('mn_gb_import').where({})
+
+for (const mentor of mentors) {
+  const task = await getTask(mentor.mn_id)
+  const gbContact = await db
+    .select()
+    .from('mn_gb_contacts_raw')
+    .where({ mn_id: mentor.mn_id })
+    .first()
+
+  const importRow = {
+    mn_id: mentor.mn_id,
+    'Givebutter Contact ID': gbContact?.contact_id?.toString() || null,
+    'Contact External ID': mentor.mn_id,
+    'Prefix': mentor.preferred_name,
+    'First Name': mentor.first_name,
+    'Middle Name': mentor.middle_name,
+    'Last Name': mentor.last_name,
+    'Primary Email': mentor.personal_email || mentor.uga_email,
+    'Primary Phone Number': mentor.phone,
+    'Tags': generateTags(mentor.status_category),
+    '📝 Sign Up Complete': task.signup_done ? 'Yes' : 'No',
+    // ... etc
+    needs_sync: true
+  }
+
+  await db.insert('mn_gb_import').values(importRow)
+}
+```
+
+**Use Cases:**
+1. User downloads CSV for Givebutter import
+2. Update existing contacts (those with contact_id)
+3. Create new contacts (those without contact_id)
+4. Sync custom fields back to Givebutter
+
+### Table: `mn_errors`
+
+**Purpose:** Log all conflicts, duplicates, and anomalies
+
+```sql
+CREATE TABLE mn_errors (
+  id SERIAL PRIMARY KEY,
+  mn_id TEXT REFERENCES mentors(mn_id),
+  phone TEXT,
+  email TEXT,
+
+  error_type TEXT,                      -- duplicate_signup, contact_data_conflict, etc.
+  error_message TEXT,
+  severity TEXT,                        -- critical | error | warning | info
+  source_table TEXT,
+  raw_data JSONB,
+
+  resolved BOOLEAN DEFAULT FALSE,
+  resolved_at TIMESTAMPTZ,
+  resolved_by TEXT,
+
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+**Error Types:**
+- `missing_mn_id` - Signup without mentor ID (assigned 999xxx placeholder)
+- `duplicate_signup` - Multiple signups with same phone
+- `invalid_phone` - Phone number could not be normalized
+- `multiple_contacts` - Multiple GB contacts matched to one mentor
+- `contact_data_conflict` - Data differs between Jotform and Givebutter
+- `duplicate_gb_contact` - Same phone/email has multiple GB contacts
+
+### Configuration Tables
+
+```sql
+-- API Configuration
+CREATE TABLE sync_config (
+  id INTEGER PRIMARY KEY DEFAULT 1,
+  jotform_api_key TEXT,
+  jotform_signup_form_id TEXT,
+  jotform_setup_form_id TEXT,
+  givebutter_api_key TEXT,
+  givebutter_campaign_code TEXT,
+  automated_sync_enabled BOOLEAN DEFAULT FALSE,
+  sync_interval_hours INTEGER DEFAULT 6,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Sync History
+CREATE TABLE sync_log (
+  id SERIAL PRIMARY KEY,
+  sync_type TEXT,                       -- initialization | automated | manual | feature_csv_upload
+  status TEXT,                          -- running | completed | failed
+  triggered_by TEXT,                    -- manual | scheduled | system
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  duration_seconds INTEGER,
+  error_message TEXT,
+  error_details JSONB,
+  records_processed INTEGER,
+  records_inserted INTEGER,
+  records_updated INTEGER,
+  records_failed INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- CSV Upload History
+CREATE TABLE csv_import_log (
+  id SERIAL PRIMARY KEY,
+  uploaded_at TIMESTAMPTZ DEFAULT NOW(),
+  filename TEXT,
+  total_contacts INTEGER,
+  mentors_matched INTEGER,
+  new_contact_ids_captured INTEGER,
+  duplicates_detected INTEGER,
+  uploaded_by TEXT,                     -- future: user auth
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+---
+
+## Data Flow Scenarios
+
+### Scenario 1: New Mentor, First Year
+
+**Setup:** Mentor has never participated before, no Givebutter contact exists
+
+```
+Step 1: Mentor Signs Up (Jotform)
+├─ Fills out signup form
+├─ Submission ID: 250123456789
+├─ Mentor ID: 1234
+├─ Phone: (555) 123-4567
+└─ Email: mentor@example.com
+
+Step 2: Periodic Sync Captures Signup
+├─ GET /form/{signup_form_id}/submissions
+├─ UPSERT mn_signups_raw
+├─ ETL runs:
+│   ├─ Normalize phone: +15551234567
+│   ├─ Create mentor record (mn_id=1234)
+│   ├─ gb_contact_id = NULL (no contact yet)
+│   └─ status = 'needs_setup'
+└─ Result: Mentor exists in our system
+
+Step 3: Mentor Completes Setup Form
+├─ Submits Givebutter setup form
+├─ Periodic sync captures it
+├─ ETL updates:
+│   └─ status = 'needs_page'
+
+Step 4: Mentor Creates Fundraising Page
+├─ Creates page in Givebutter
+├─ Becomes campaign member
+├─ Periodic sync:
+│   ├─ GET /campaigns/{id}/members
+│   ├─ UPSERT campaign_members_raw (member_id=789, amount=0)
+│   └─ ETL links member to mentor
+└─ status = 'needs_fundraising'
+
+Step 5: Admin Wants to Update Contact in GB
+├─ Problem: No gb_contact_id yet!
+├─ Can't call GET /contacts/{id}
+└─ Need CSV to establish mapping
+
+Step 6: Generate Export for GB Import
+├─ ETL regenerates mn_gb_import
+├─ Row for mn_id=1234:
+│   ├─ "Givebutter Contact ID" = NULL (no contact yet)
+│   ├─ "Contact External ID" = "1234"
+│   ├─ "Prefix" = "John"
+│   ├─ "First Name" = "John"
+│   └─ Custom fields populated
+└─ User downloads CSV
+
+Step 7: Import to Givebutter
+├─ User uploads CSV to Givebutter
+├─ Givebutter creates new contact
+├─ Assigns contact_id = 15234567
+└─ Sets external_id = "1234"
+
+Step 8: CSV Feedback Loop
+├─ User downloads fresh Givebutter export
+├─ Uploads to our system
+├─ Parse CSV:
+│   ├─ Contact 15234567 has external_id="1234"
+│   ├─ Match to mentor (mn_id=1234)
+│   ├─ UPDATE mentors SET gb_contact_id=15234567
+│   └─ INSERT mn_gb_contacts_raw
+└─ Result: Mentor now has contact_id!
+
+Step 9: Future Syncs Can Use API
+├─ Periodic sync:
+│   ├─ FOR mentor WHERE gb_contact_id IS NOT NULL
+│   ├─ GET /contacts/15234567
+│   └─ UPSERT mn_gb_contacts_raw
+└─ Bidirectional sync established!
+```
+
+**Key Insight:** New mentors go through feedback loop before API sync works.
+
+### Scenario 2: Returning Mentor (Previous Year)
+
+**Setup:** Mentor participated in 2024, returning for 2025
+
+```
+Step 1: Mentor Exists in Givebutter from 2024
+├─ Contact ID: 12345678
+├─ External ID: "" (not set last year)
+├─ Phone: +15551234567
+├─ Email: mentor@example.com
+├─ Tags: "Mentors 2024"
+└─ Custom fields from 2024
+
+Step 2: Mentor Signs Up for 2025
+├─ New Jotform submission
+├─ New Mentor ID: 2345 (different from 2024)
+├─ Same phone and email
+└─ Periodic sync creates new mentor record
+
+Step 3: Initial CSV Upload (During Setup)
+├─ CSV contains 2024 contact (contact_id=12345678)
+├─ Match by phone: +15551234567
+├─ Find existing contact in CSV
+├─ UPDATE mentors SET gb_contact_id=12345678 WHERE mn_id=2345
+├─ INSERT mn_gb_contacts_raw
+└─ Result: Linked to existing contact!
+
+Step 4: First Export Updates External ID
+├─ Generate mn_gb_import
+├─ Row for mn_id=2345:
+│   ├─ "Givebutter Contact ID" = "12345678" (existing!)
+│   ├─ "Contact External ID" = "2345" (new mn_id)
+│   └─ Tags: "Mentors 2025" (updated)
+├─ User imports to Givebutter
+└─ Givebutter updates contact (doesn't create duplicate)
+
+Step 5: Contact Updated in Givebutter
+├─ External ID: "2345" (updated from blank)
+├─ Tags: "Mentors 2024, Mentors 2025"
+├─ Custom fields: Updated for 2025
+└─ No duplicate contact created!
+```
+
+**Key Insight:** CSV matching prevents duplicate contacts for returning mentors.
+
+### Scenario 3: CSV Feedback Loop (New Contact Created)
+
+Detailed walkthrough of the critical feedback loop:
+
+```
+State: Mentor exists, no gb_contact_id yet
+
+Step 1: Periodic Sync Runs
+├─ mn_id=1234 exists
+├─ gb_contact_id=NULL
+└─ Skipped in contact sync (no contact_id to fetch)
+
+Step 2: Admin Generates Export
+├─ Click "Generate Contact Import CSV"
+├─ mn_gb_import table has row for mn_id=1234
+├─ Download CSV with 555 rows
+└─ 105 rows have NULL for "Givebutter Contact ID" (new mentors)
+
+Step 3: Import to Givebutter
+├─ Admin uploads CSV to Givebutter
+├─ Givebutter processes:
+│   ├─ Row with contact_id → UPDATE existing
+│   ├─ Row without contact_id → CREATE new
+│   └─ 105 new contacts created
+└─ New contact_id assigned to each
+
+Step 4: Download Fresh Export
+├─ Admin downloads Givebutter full export
+├─ CSV now contains newly created contacts
+└─ Contact 15234567 with external_id="1234"
+
+Step 5: Upload to Our System
+├─ Click "Upload CSV" in Mentors page
+├─ Parse all 40k contacts → full_gb_contacts
+├─ Match to mentors:
+│   ├─ Find contact with external_id="1234"
+│   ├─ OR match by phone +15551234567
+│   ├─ UPDATE mentors SET gb_contact_id=15234567
+│   └─ INSERT mn_gb_contacts_raw
+└─ Summary: "15 new contact_ids captured"
+
+Step 6: Next Periodic Sync
+├─ mn_id=1234 now has gb_contact_id=15234567
+├─ GET /contacts/15234567
+├─ UPSERT mn_gb_contacts_raw
+└─ Full bidirectional sync active!
+```
+
+**Key Insight:** CSV upload after Givebutter import is critical to close the loop.
+
+### Scenario 4: Duplicate Contacts in Givebutter
+
+**Setup:** Same person has multiple contacts in Givebutter
+
+```
+Givebutter State:
+├─ Contact 11111: phone=+15551234567, email=old@example.com
+├─ Contact 22222: phone=+15551234567, email=new@example.com
+└─ Contact 33333: phone=+15559999999, email=new@example.com
+
+Our System:
+└─ Mentor 1234: phone=+15551234567, email=new@example.com
+
+Step 1: CSV Upload
+├─ Parse CSV
+├─ Contact 11111: phone matches mentor 1234
+├─ Contact 22222: phone matches mentor 1234
+├─ Both have same phone!
+
+Step 2: Duplicate Detection
+├─ Group contacts by phone
+├─ +15551234567 → [11111, 22222]
+├─ Count > 1 → duplicate!
+├─ Log to mn_errors:
+│   ├─ error_type: 'duplicate_gb_contact'
+│   ├─ severity: 'warning'
+│   ├─ message: "2 Givebutter contacts share phone +15551234567"
+│   └─ raw_data: { contact_ids: [11111, 22222] }
+
+Step 3: Matching Decision
+├─ Multiple contacts match criteria
+├─ Strategy: Pick highest contact_id (most recent)
+├─ UPDATE mentors SET gb_contact_id=22222
+├─ Log warning in mn_errors
+
+Step 4: Admin Reviews Duplicates
+├─ Sync page → Errors tab
+├─ Filter: error_type='duplicate_gb_contact'
+├─ See: "Mentor 1234 has 2 GB contacts: 11111, 22222"
+└─ Decision: Archive 11111, keep 22222
+
+Step 5: Manual Resolution (Future Feature)
+├─ Admin marks 22222 as canonical
+├─ Archive 11111 via Givebutter API (future)
+└─ Mark error as resolved
+```
+
+**Key Insight:** Duplicates are detected and logged, not silently resolved.
+
+### Scenario 5: Contact Data Edited in Givebutter UI
+
+**Problem:** Admin edits contact info in Givebutter, how does it sync back?
+
+**Initial Approach (Rejected):** Parse CSV and merge data back to mentors
+
+**Problem with CSV Merge:**
+- Source of truth conflict: Jotform vs Givebutter?
+- If phone changes in GB, which is correct?
+- Custom fields can be updated in GB but we also compute them
+- Complex merge logic prone to errors
+
+**Solution (API-based Sync):**
+
+```
+State:
+├─ Jotform signup: name="Robert", phone="+15551234567"
+├─ Our mentor: preferred_name="Robert", phone="+15551234567"
+└─ GB contact: prefix="Rob", phone="+15551234567"
+
+Step 1: Admin Edits in Givebutter UI
+├─ Changes prefix to "Bobby"
+├─ Updates custom field "📆 Shift Preference" to "Option 3"
+└─ Givebutter updates contact, sets last_modified_utc
+
+Step 2: Periodic Sync Runs
+├─ GET /contacts/{gb_contact_id}
+├─ Response:
+│   ├─ prefix: "Bobby"
+│   ├─ phone: "+15551234567"
+│   ├─ custom_fields: { "📆 Shift Preference": "Option 3" }
+│   └─ last_modified_utc: "2025-10-08T15:30:00Z"
+└─ UPSERT mn_gb_contacts_raw
+
+Step 3: Compare with Mentor Table
+├─ GB has: prefix="Bobby"
+├─ Mentor has: preferred_name="Robert"
+├─ Differ! What to do?
+
+Step 4: Field Ownership Rules
+├─ preferred_name: Either source allowed
+│   → UPDATE mentors SET preferred_name="Bobby"
+│   → Log: "Preferred name updated from GB"
+├─ phone: Jotform is source of truth
+│   → If differs, log conflict, don't update
+├─ custom_fields: GB is source for shift_preference
+│   → UPDATE mentors SET shift_preference="Option 3"
+└─ Result: Selective sync-back
+
+Step 5: Next Export Includes Updates
+├─ ETL regenerates mn_gb_import
+├─ Row now has:
+│   ├─ "Prefix": "Bobby" (from mentor)
+│   ├─ "📆 Shift Preference": "Option 3" (from GB via mentor)
+│   └─ Everything stays in sync
+```
+
+**Field Ownership Rules:**
+
+| Field | Source of Truth | Sync Back from GB? |
+|-------|----------------|-------------------|
+| mn_id | Jotform | ❌ Never |
+| phone | Jotform | ❌ Log conflict |
+| uga_email | Jotform | ❌ Log conflict |
+| personal_email | Jotform | ❌ Log conflict |
+| first_name | Jotform | ❌ Log conflict |
+| middle_name | Jotform | ❌ Log conflict |
+| last_name | Jotform | ❌ Log conflict |
+| preferred_name | Either | ✅ Allow GB updates |
+| gender | Jotform | ❌ Don't sync back |
+| shirt_size | Jotform | ❌ Don't sync back |
+| custom_fields | Computed | ✅ Read-only from GB |
+| tags | Both | ✅ Merge (keep ours + add GB) |
+
+**Key Insight:** API sync allows selective field updates without CSV merge complexity.
+
+---
+
+## CSV Upload & Contact Matching
+
+### Initial CSV Upload (Full Parse)
+
+**When:** During initialization or manual CSV upload
+
+**Purpose:**
+1. Discover contact_ids for existing contacts
+2. Match mentors to Givebutter contacts
+3. Detect duplicates
+4. Store snapshot for historical reference
+
+**Flow:**
+
+```typescript
+async function uploadGivebutterCSV(file: File) {
+  console.log('📤 Uploading Givebutter CSV...')
+
+  // Step 1: Parse CSV (all 58 columns)
+  const rows = await parseCSV(file)
+  console.log(`Parsed ${rows.length} contacts`)
+
+  // Step 2: Clear and repopulate full_gb_contacts
+  await db.delete('full_gb_contacts').where({})
+
+  for (const row of rows) {
+    const contact = parseGivebutterRow(row)
+    await db.insert('full_gb_contacts').values({
+      ...contact,
+      csv_uploaded_at: new Date(),
+      csv_filename: file.name
+    })
+  }
+
+  // Step 3: Match contacts to mentors
+  const { matched, newContactIds, duplicates } = await matchContactsToMentors()
+
+  // Step 4: Log results
+  await db.insert('csv_import_log').values({
+    filename: file.name,
+    total_contacts: rows.length,
+    mentors_matched: matched,
+    new_contact_ids_captured: newContactIds,
+    duplicates_detected: duplicates
+  })
+
+  return {
+    contacts_imported: rows.length,
+    mentors_matched: matched,
+    new_contact_ids: newContactIds,
+    duplicates_detected: duplicates,
+    csv_age_hours: 0
+  }
+}
+```
+
+### Contact Matching Algorithm
+
+**Priority Order:**
+1. External ID match (if set)
+2. Phone number match (primary)
+3. Email match (secondary)
+4. Member ID match (fallback)
+
+**Detailed Logic:**
+
+```typescript
+async function matchContactsToMentors() {
+  const contacts = await db.select().from('full_gb_contacts')
+  const mentors = await db.select().from('mentors')
+
+  let matched = 0
+  let newContactIds = 0
+  let duplicates = 0
+
+  for (const contact of contacts) {
+    let mentor = null
+
+    // Strategy 1: Match by external_id (if set in GB)
+    if (contact.external_id) {
+      mentor = mentors.find(m => m.mn_id === contact.external_id)
+      if (mentor) {
+        console.log(`✅ Matched by external_id: ${contact.contact_id} → ${mentor.mn_id}`)
+      }
+    }
+
+    // Strategy 2: Match by phone (most reliable)
+    if (!mentor && contact.primary_phone) {
+      const normPhone = normalizePhone(contact.primary_phone)
+      mentor = mentors.find(m => m.phone === normPhone)
+
+      if (mentor) {
+        console.log(`✅ Matched by phone: ${contact.contact_id} → ${mentor.mn_id}`)
+
+        // Check for duplicate contacts with same phone
+        const duplicateContacts = contacts.filter(c =>
+          normalizePhone(c.primary_phone) === normPhone
+        )
+
+        if (duplicateContacts.length > 1) {
+          duplicates++
+          await logDuplicate(normPhone, duplicateContacts)
+        }
+      }
+    }
+
+    // Strategy 3: Match by email
+    if (!mentor && contact.primary_email) {
+      const normEmail = normalizeEmail(contact.primary_email)
+
+      mentor = mentors.find(m =>
+        normalizeEmail(m.personal_email) === normEmail ||
+        normalizeEmail(m.uga_email) === normEmail
+      )
+
+      if (mentor) {
+        console.log(`✅ Matched by email: ${contact.contact_id} → ${mentor.mn_id}`)
+
+        // Check for duplicate contacts with same email
+        const duplicateContacts = contacts.filter(c =>
+          normalizeEmail(c.primary_email) === normEmail
+        )
+
+        if (duplicateContacts.length > 1) {
+          duplicates++
+          await logDuplicate(normEmail, duplicateContacts)
+        }
+      }
+    }
+
+    // Strategy 4: Match by member_id (if they're a campaign member)
+    if (!mentor) {
+      const member = await db
+        .select()
+        .from('campaign_members_raw')
+        .where({ member_id: contact.member_id })  // Assuming this is in raw data
+        .first()
+
+      if (member && member.mn_id) {
+        mentor = mentors.find(m => m.mn_id === member.mn_id)
+        if (mentor) {
+          console.log(`✅ Matched by member_id: ${contact.contact_id} → ${mentor.mn_id}`)
+        }
+      }
+    }
+
+    // If matched, update mentor and store in mn_gb_contacts_raw
+    if (mentor) {
+      matched++
+
+      // Check if this is a new contact_id for this mentor
+      const hadContactId = mentor.gb_contact_id !== null
+      if (!hadContactId) {
+        newContactIds++
+      }
+
+      // Update mentor with contact_id
+      await db
+        .update('mentors')
+        .set({ gb_contact_id: contact.contact_id })
+        .where({ mn_id: mentor.mn_id })
+
+      // Store in mentor contacts table
+      await db
+        .insert('mn_gb_contacts_raw')
+        .values({
+          contact_id: contact.contact_id,
+          mn_id: mentor.mn_id,
+          ...contact,
+          source: 'csv_match',
+          gb_updated_at: contact.last_modified_utc,
+          sync_status: 'synced'
+        })
+        .onConflict('contact_id')
+        .merge()
+    }
+  }
+
+  return { matched, newContactIds, duplicates }
+}
+```
+
+### Phone Normalization
+
+```typescript
+function normalizePhone(phone: string | null | undefined): string {
+  if (!phone) return ''
+
+  // Remove all non-digit characters
+  const digits = phone.replace(/\D/g, '')
+
+  // Must be at least 10 digits
+  if (digits.length < 10) return ''
+
+  // Take last 10 digits (remove country code if present)
+  const last10 = digits.slice(-10)
+
+  // Return in E.164 format
+  return `+1${last10}`
+}
+
+// Examples:
+// "(555) 123-4567" → "+15551234567"
+// "555-123-4567" → "+15551234567"
+// "15551234567" → "+15551234567"
+// "+1 (555) 123-4567" → "+15551234567"
+```
+
+### Email Normalization
+
+```typescript
+function normalizeEmail(email: string | null | undefined): string {
+  if (!email) return ''
+  return email.toLowerCase().trim()
+}
+```
+
+### Duplicate Detection
+
+```typescript
+async function detectDuplicates() {
+  const contacts = await db.select().from('full_gb_contacts')
+
+  // Group by phone
+  const phoneGroups = new Map<string, typeof contacts>()
+  for (const contact of contacts) {
+    if (!contact.primary_phone) continue
+
+    const normPhone = normalizePhone(contact.primary_phone)
+    if (!phoneGroups.has(normPhone)) {
+      phoneGroups.set(normPhone, [])
+    }
+    phoneGroups.get(normPhone)!.push(contact)
+  }
+
+  // Find duplicates
+  const duplicates = []
+  for (const [phone, group] of phoneGroups) {
+    if (group.length > 1) {
+      duplicates.push({
+        phone,
+        count: group.length,
+        contact_ids: group.map(c => c.contact_id)
+      })
+
+      // Log to mn_errors
+      await db.insert('mn_errors').values({
+        phone,
+        error_type: 'duplicate_gb_contact',
+        severity: 'warning',
+        error_message: `${group.length} Givebutter contacts share phone ${phone}: contact IDs ${group.map(c => c.contact_id).join(', ')}. Manual consolidation needed.`,
+        source_table: 'full_gb_contacts',
+        raw_data: { contacts: group }
+      })
+    }
+  }
+
+  // Repeat for emails
+  const emailGroups = new Map<string, typeof contacts>()
+  for (const contact of contacts) {
+    if (!contact.primary_email) continue
+
+    const normEmail = normalizeEmail(contact.primary_email)
+    if (!emailGroups.has(normEmail)) {
+      emailGroups.set(normEmail, [])
+    }
+    emailGroups.get(normEmail)!.push(contact)
+  }
+
+  for (const [email, group] of emailGroups) {
+    if (group.length > 1) {
+      // Check if already logged by phone
+      const alreadyLogged = duplicates.some(d =>
+        d.contact_ids.some(id => group.some(c => c.contact_id === id))
+      )
+
+      if (!alreadyLogged) {
+        duplicates.push({
+          email,
+          count: group.length,
+          contact_ids: group.map(c => c.contact_id)
+        })
+
+        await db.insert('mn_errors').values({
+          email,
+          error_type: 'duplicate_gb_contact',
+          severity: 'warning',
+          error_message: `${group.length} Givebutter contacts share email ${email}: contact IDs ${group.map(c => c.contact_id).join(', ')}. Manual consolidation needed.`,
+          source_table: 'full_gb_contacts',
+          raw_data: { contacts: group }
+        })
+      }
+    }
+  }
+
+  return duplicates
+}
+```
+
+---
+
+## Contact Sync via API
+
+### When It Runs
+
+**Part of Periodic Sync:** After ETL completes, before sync finishes
+
+**Frequency:** Same as periodic sync (e.g., every 6 hours)
+
+**Prerequisite:** Mentor must have `gb_contact_id` (from CSV upload)
+
+### API Endpoint Used
+
+```
+GET https://api.givebutter.com/v1/contacts/{contact_id}
+Authorization: Bearer {api_key}
+
+Response: {
+  "id": 15234567,
+  "external_id": "1234",
+  "prefix": "John",
+  "first_name": "John",
+  "middle_name": null,
+  "last_name": "Doe",
+  "primary_email": "john@example.com",
+  "primary_phone": "+15551234567",
+  "tags": ["Mentors 2025"],
+  "custom_fields": {
+    "📝 Sign Up Complete": "Yes",
+    "💸 Givebutter Page Setup": "Yes",
+    "📆 Shift Preference": "Option 3"
+  },
+  "updated_at": "2025-10-08T15:30:00Z",
+  // ... all other fields
+}
+```
+
+### Sync Logic
+
+```typescript
+async function syncGivebutterContacts() {
+  console.log('🔄 Syncing Givebutter contacts via API...')
+
+  // Get all mentors with contact_ids
+  const mentors = await db
+    .select()
+    .from('mentors')
+    .whereNotNull('gb_contact_id')
+
+  console.log(`Found ${mentors.length} mentors with contact_ids`)
+
+  let synced = 0
+  let conflicts = 0
+  let errors = 0
+
+  for (const mentor of mentors) {
+    try {
+      // Fetch contact from Givebutter API
+      const response = await fetch(
+        `https://api.givebutter.com/v1/contacts/${mentor.gb_contact_id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${GIVEBUTTER_API_KEY}`
+          }
+        }
+      )
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          // Contact deleted in Givebutter
+          await logError({
+            mn_id: mentor.mn_id,
+            error_type: 'contact_deleted',
+            severity: 'error',
+            error_message: `Contact ${mentor.gb_contact_id} no longer exists in Givebutter`,
+            source_table: 'mn_gb_contacts_raw'
+          })
+          errors++
+          continue
+        }
+        throw new Error(`API error: ${response.status}`)
+      }
+
+      const gbContact = await response.json()
+
+      // Upsert to mn_gb_contacts_raw
+      await db
+        .insert('mn_gb_contacts_raw')
+        .values({
+          contact_id: gbContact.id,
+          mn_id: mentor.mn_id,
+          external_id: gbContact.external_id,
+          prefix: gbContact.prefix,
+          first_name: gbContact.first_name,
+          middle_name: gbContact.middle_name,
+          last_name: gbContact.last_name,
+          primary_email: gbContact.primary_email,
+          primary_phone: gbContact.primary_phone,
+          // ... all fields
+          custom_fields: gbContact.custom_fields,
+          source: 'api_sync',
+          gb_updated_at: new Date(gbContact.updated_at),
+          last_synced_at: new Date(),
+          sync_status: 'synced'
+        })
+        .onConflict('contact_id')
+        .merge()
+
+      // Compare with mentor table and detect conflicts
+      const conflictList = await detectConflicts(mentor, gbContact)
+
+      if (conflictList.length > 0) {
+        conflicts++
+        await logConflicts(mentor.mn_id, conflictList, gbContact)
+
+        // Update sync status
+        await db
+          .update('mn_gb_contacts_raw')
+          .set({ sync_status: 'conflict' })
+          .where({ contact_id: gbContact.id })
+      }
+
+      // Sync back allowed fields (preferred name, personal email, etc.)
+      await syncBackFromGivebutter(mentor, gbContact)
+
+      synced++
+
+      if (synced % 50 === 0) {
+        console.log(`   Synced ${synced}/${mentors.length} contacts...`)
+      }
+
+    } catch (error) {
+      console.error(`❌ Error syncing contact for ${mentor.mn_id}:`, error)
+      errors++
+    }
+  }
+
+  console.log(`✅ Contact sync complete: ${synced} synced, ${conflicts} conflicts, ${errors} errors`)
+}
+```
+
+### Conflict Detection
+
+```typescript
+async function detectConflicts(mentor: Mentor, gbContact: any) {
+  const conflicts = []
+
+  // Phone conflict
+  const normMentorPhone = normalizePhone(mentor.phone)
+  const normGbPhone = normalizePhone(gbContact.primary_phone)
+
+  if (normMentorPhone !== normGbPhone) {
+    conflicts.push({
+      field: 'phone',
+      jotform_value: mentor.phone,
+      givebutter_value: gbContact.primary_phone,
+      gb_updated_at: gbContact.updated_at
+    })
+  }
+
+  // UGA Email conflict (Jotform source of truth)
+  if (mentor.uga_email) {
+    const normMentorUga = normalizeEmail(mentor.uga_email)
+    const normGbEmail = normalizeEmail(gbContact.primary_email)
+
+    if (normMentorUga === normGbEmail) {
+      // UGA email is in GB primary - good
+    } else {
+      // Check additional emails
+      const gbEmails = [
+        gbContact.primary_email,
+        ...(gbContact.additional_emails || [])
+      ].map(normalizeEmail)
+
+      if (!gbEmails.includes(normMentorUga)) {
+        conflicts.push({
+          field: 'uga_email',
+          jotform_value: mentor.uga_email,
+          givebutter_value: gbContact.primary_email,
+          gb_updated_at: gbContact.updated_at
+        })
+      }
+    }
+  }
+
+  // Name conflicts (first/middle/last are Jotform source of truth)
+  if (mentor.first_name !== gbContact.first_name) {
+    conflicts.push({
+      field: 'first_name',
+      jotform_value: mentor.first_name,
+      givebutter_value: gbContact.first_name,
+      gb_updated_at: gbContact.updated_at
+    })
+  }
+
+  if (mentor.last_name !== gbContact.last_name) {
+    conflicts.push({
+      field: 'last_name',
+      jotform_value: mentor.last_name,
+      givebutter_value: gbContact.last_name,
+      gb_updated_at: gbContact.updated_at
+    })
+  }
+
+  return conflicts
+}
+
+async function logConflicts(mn_id: string, conflicts: any[], gbContact: any) {
+  await db.insert('mn_errors').values({
+    mn_id,
+    error_type: 'contact_data_conflict',
+    severity: 'warning',
+    error_message: `Contact data differs between Jotform and Givebutter for ${conflicts.length} fields`,
+    source_table: 'mn_gb_contacts_raw',
+    raw_data: {
+      conflicts,
+      contact_id: gbContact.id,
+      gb_updated_at: gbContact.updated_at
+    }
+  })
+}
+```
+
+### Sync Back from Givebutter
+
+**Allowed Fields:** These can be updated from Givebutter
+
+```typescript
+async function syncBackFromGivebutter(mentor: Mentor, gbContact: any) {
+  const updates: any = {}
+
+  // Preferred name (prefix in GB)
+  if (gbContact.prefix && gbContact.prefix !== mentor.preferred_name) {
+    updates.preferred_name = gbContact.prefix
+    console.log(`  ✏️  Updating preferred_name: ${mentor.preferred_name} → ${gbContact.prefix}`)
+  }
+
+  // Personal email (can be updated in GB)
+  if (gbContact.primary_email) {
+    const gbEmail = normalizeEmail(gbContact.primary_email)
+    const mentorPersonal = normalizeEmail(mentor.personal_email)
+    const mentorUga = normalizeEmail(mentor.uga_email)
+
+    // If GB primary is not UGA email, assume it's personal
+    if (gbEmail !== mentorUga && gbEmail !== mentorPersonal) {
+      updates.personal_email = gbContact.primary_email
+      console.log(`  ✏️  Updating personal_email: ${mentor.personal_email} → ${gbContact.primary_email}`)
+    }
+  }
+
+  // Custom field updates (read-only, store for reference)
+  // We don't update mentor table from custom fields, but we note the change
+  if (gbContact.custom_fields) {
+    const shiftPref = gbContact.custom_fields['📆 Shift Preference']
+    if (shiftPref && shiftPref !== mentor.shift_preference) {
+      updates.shift_preference = shiftPref
+      console.log(`  ✏️  Updating shift_preference from GB: ${shiftPref}`)
+    }
+  }
+
+  // Apply updates if any
+  if (Object.keys(updates).length > 0) {
+    await db
+      .update('mentors')
+      .set({
+        ...updates,
+        updated_at: new Date()
+      })
+      .where({ mn_id: mentor.mn_id })
+  }
+}
+```
+
+### Rate Limiting Considerations
+
+**Problem:** 555 mentors = 555 API calls per sync
+
+**Options:**
+
+1. **Batch with Delay** (Safest)
+```typescript
+// Fetch 10 contacts, wait 1 second, repeat
+for (let i = 0; i < mentors.length; i += 10) {
+  const batch = mentors.slice(i, i + 10)
+  await Promise.all(batch.map(m => syncContact(m)))
+  await sleep(1000) // 1 second between batches
+}
+```
+
+2. **Separate Schedule** (Recommended)
+```typescript
+// Sync contacts less frequently than member data
+// Member sync: every 6 hours
+// Contact sync: every 24 hours (daily)
+```
+
+3. **Incremental Sync** (Future optimization)
+```typescript
+// Only sync contacts where gb_updated_at > last_synced_at
+// Requires tracking last_modified from API
+```
+
+**Recommendation:** Start with Option 2 - daily contact sync is sufficient since contact data changes less frequently than fundraising amounts.
+
+---
+
+## Conflict Detection & Resolution
+
+### Field Ownership Model
+
+**Three Categories:**
+
+1. **Jotform-owned (Read-only from GB)**
+   - mn_id, phone, uga_email, first_name, middle_name, last_name
+   - Demographics: gender, shirt_size, uga_class
+   - If conflict detected → log to mn_errors, don't update
+
+2. **Bidirectional (Allow GB updates)**
+   - preferred_name (can be corrected in GB UI)
+   - personal_email (might change, GB is valid source)
+   - shift_preference (can be set in GB custom fields)
+
+3. **Computed (One-way export)**
+   - status_category, status_text
+   - Custom field values (exported to GB, but computed from our data)
+   - Tags (generated based on status)
+
+### Conflict Resolution Strategy
+
+```typescript
+interface ConflictResolutionRule {
+  field: string
+  source_of_truth: 'jotform' | 'givebutter' | 'either'
+  on_conflict: 'log_only' | 'update_from_gb' | 'update_to_gb'
+}
+
+const CONFLICT_RULES: ConflictResolutionRule[] = [
+  // Identity fields - Jotform owns
+  { field: 'mn_id', source_of_truth: 'jotform', on_conflict: 'log_only' },
+  { field: 'phone', source_of_truth: 'jotform', on_conflict: 'log_only' },
+  { field: 'uga_email', source_of_truth: 'jotform', on_conflict: 'log_only' },
+  { field: 'first_name', source_of_truth: 'jotform', on_conflict: 'log_only' },
+  { field: 'middle_name', source_of_truth: 'jotform', on_conflict: 'log_only' },
+  { field: 'last_name', source_of_truth: 'jotform', on_conflict: 'log_only' },
+
+  // Demographics - Jotform owns
+  { field: 'gender', source_of_truth: 'jotform', on_conflict: 'log_only' },
+  { field: 'shirt_size', source_of_truth: 'jotform', on_conflict: 'log_only' },
+  { field: 'uga_class', source_of_truth: 'jotform', on_conflict: 'log_only' },
+
+  // Bidirectional fields
+  { field: 'preferred_name', source_of_truth: 'either', on_conflict: 'update_from_gb' },
+  { field: 'personal_email', source_of_truth: 'either', on_conflict: 'update_from_gb' },
+  { field: 'shift_preference', source_of_truth: 'either', on_conflict: 'update_from_gb' },
+  { field: 'partner_preference', source_of_truth: 'either', on_conflict: 'update_from_gb' },
+
+  // Computed fields - One-way export
+  { field: 'status_category', source_of_truth: 'jotform', on_conflict: 'update_to_gb' },
+  { field: 'custom_fields', source_of_truth: 'jotform', on_conflict: 'update_to_gb' },
+]
+```
+
+### Conflict Display in UI
+
+**Mentors Table:**
+
+| MN ID | Name | Status | GB Sync | Actions |
+|-------|------|--------|---------|---------|
+| 1001 | Alice | Complete | ✅ Synced 2h ago | - |
+| 1002 | Bob | Needs Page | ⚠️ **Conflicts** | [Review] |
+| 1003 | Carol | Needs Setup | 🔄 Syncing... | - |
+| 1004 | Dave | Complete | ❌ No contact ID | [Upload CSV] |
+
+**Conflict Detail Modal:**
+
+```
+⚠️  Data Conflicts for Bob (MN ID: 1002)
+
+Contact ID: 15234567
+Last updated in Givebutter: 2025-10-08 15:30:00 UTC
+
+┌─────────────────┬──────────────────┬──────────────────┐
+│ Field           │ Our System       │ Givebutter       │
+├─────────────────┼──────────────────┼──────────────────┤
+│ Phone           │ +15551234567     │ +15559999999     │
+│ Personal Email  │ bob@example.com  │ robert@gmail.com │
+└─────────────────┴──────────────────┴──────────────────┘
+
+Recommended Action:
+Phone is managed by Jotform signup - Givebutter value should be updated.
+Personal email can be updated - accept Givebutter value?
+
+[Keep Our Values] [Accept GB Values] [Manual Review]
+```
+
+### Error Log View
+
+**Sync Page → Errors Tab:**
+
+```
+Filter: [All Types ▼] [All Severity ▼] [Unresolved Only ☑]
+
+┌────────────────────────────────────────────────────────────────┐
+│ ⚠️  Contact Data Conflict (Warning)                            │
+│ Mentor: 1002 (Bob)                                            │
+│ Created: 2 hours ago                                          │
+│                                                               │
+│ Contact data differs between Jotform and Givebutter for      │
+│ 2 fields: phone, personal_email                              │
+│                                                               │
+│ [View Details] [Mark Resolved]                               │
+└────────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────────┐
+│ ⚠️  Duplicate Givebutter Contact (Warning)                     │
+│ Phone: +15551234567                                           │
+│ Created: 1 day ago                                            │
+│                                                               │
+│ 3 Givebutter contacts share phone +15551234567:              │
+│ Contact IDs: 11111, 22222, 33333                             │
+│                                                               │
+│ [View Contacts] [Archive Duplicates] [Mark Resolved]         │
+└────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Edge Cases & Solutions
+
+### 1. Phone Number Changed
+
+**Scenario:** Mentor changes phone number after signing up
+
+```
+State:
+├─ Jotform signup: phone = "+15551111111"
+├─ Mentor table: phone = "+15551111111"
+├─ Mentor gets new phone: "+15552222222"
+└─ Updates in Givebutter: primary_phone = "+15552222222"
+
+Problem:
+- Periodic sync fetches GB contact
+- Phone differs from our record
+- Which is correct?
+
+Solution:
+1. Jotform is source of truth for phone
+2. Log conflict to mn_errors
+3. Don't update mentor.phone automatically
+4. Admin reviews:
+   - Option A: Phone actually changed → manual update in our system
+   - Option B: GB has wrong phone → next export will correct it
+```
+
+### 2. Shared Phone Number
+
+**Scenario:** Family members using same phone (parent's phone for multiple kids)
+
+```
+State:
+├─ Mentor A: mn_id=1001, phone="+15551234567"
+├─ Mentor B: mn_id=1002, phone="+15551234567"
+└─ Both use parent's phone number
+
+Problem:
+- Phone normalization for deduplication will flag as duplicate
+- CSV matching will find same contact for both
+- Can't have UNIQUE constraint on phone
+
+Solution:
+1. Remove UNIQUE constraint on mentors.phone
+2. Deduplication: Keep most recent signup, log both to mn_errors
+3. CSV matching: If phone matches multiple mentors, try email as tiebreaker
+4. If email also matches (unlikely), log to mn_errors for manual review
+5. Each mentor can have same phone, but will share gb_contact_id (acceptable)
+```
+
+### 3. Deleted Contact in Givebutter
+
+**Scenario:** Admin deletes contact in Givebutter UI
+
+```
+State:
+├─ Mentor: gb_contact_id = 15234567
+└─ GB contact 15234567 deleted
+
+Problem:
+- Periodic sync tries GET /contacts/15234567
+- Returns 404 Not Found
+- What to do with stale contact_id?
+
+Solution:
+1. Log error: "Contact deleted in Givebutter"
+2. Update mn_gb_contacts_raw.sync_status = 'stale'
+3. DON'T clear gb_contact_id (admin might restore)
+4. Show warning in UI: "Contact no longer exists in GB"
+5. Admin can:
+   - Re-create contact via export
+   - Or clear gb_contact_id to treat as new mentor
+```
+
+### 4. Stale CSV Data
+
+**Scenario:** User uploads CSV from 3 days ago
+
+```
+State:
+├─ CSV uploaded: 2025-10-05
+├─ Current date: 2025-10-08
+├─ New mentor signed up: 2025-10-07
+└─ New mentor not in CSV
+
+Problem:
+- CSV won't have contact_id for new mentor
+- Might miss recent contact updates
+- User generates export with stale data
+
+Solution:
+1. Store csv_uploaded_at timestamp
+2. Calculate CSV age: now - csv_uploaded_at
+3. Show warnings:
+   - Age > 24h: "⚠️ CSV is stale, upload fresh export"
+   - Age > 7d: "🔴 CSV is very old, results may be inaccurate"
+4. Block certain operations if CSV too old:
+   - Text campaigns: require fresh CSV (<24h)
+   - Contact exports: warn but allow
+5. Always show "Last uploaded: X hours ago" in UI
+```
+
+### 5. Duplicate Contacts in Givebutter
+
+**Scenario:** Same person has 3 contacts in Givebutter
+
+```
+State:
+├─ Contact 11111: phone="+15551234567", email="old@example.com" (2023)
+├─ Contact 22222: phone="+15551234567", email="new@example.com" (2024)
+└─ Contact 33333: phone="+15551234567", email="new@example.com" (2025)
+
+Problem:
+- All three match same mentor
+- Which contact_id to use?
+- How to prevent continued duplication?
+
+Solution:
+1. Detection during CSV upload:
+   - Group contacts by phone
+   - If count > 1, log to mn_errors
+2. Matching strategy:
+   - Pick highest contact_id (most recent)
+   - Store that in mentor.gb_contact_id
+   - Log all others to mn_errors
+3. Display in UI:
+   - "Duplicates detected: 2 extra contacts for this mentor"
+   - List all contact_ids
+4. Resolution (future feature):
+   - Admin marks canonical contact
+   - Archive others via API
+   - Mark error as resolved
+```
+
+### 6. Partial CSV Upload
+
+**Scenario:** User uploads filtered/partial export instead of full export
+
+```
+State:
+├─ User filters GB export to "Mentors 2025" tag
+├─ Uploads CSV with 400 contacts (instead of 40k)
+└─ Missing 155 mentor contacts
+
+Problem:
+- CSV won't have all mentors
+- Matching will only update subset
+- Might miss duplicates outside filter
+
+Solution:
+1. Don't clear full_gb_contacts before insert (upsert instead)
+2. Track row count in csv_import_log
+3. Show warning if count drops significantly:
+   - Previous upload: 40,000 contacts
+   - Current upload: 400 contacts
+   - "⚠️ This CSV has 99% fewer contacts. Is this a filtered export?"
+4. Allow user to proceed or cancel
+5. Don't delete contacts not in CSV (upsert only)
+```
+
+### 7. No Match Found
+
+**Scenario:** Contact in CSV doesn't match any mentor
+
+```
+State:
+├─ CSV contact: phone="+15559999999", email="stranger@example.com"
+└─ No mentor with matching phone or email
+
+Problem:
+- What to do with unmatched contacts?
+- Should we track them?
+
+Solution:
+1. Expected behavior: Most contacts won't match (donors, volunteers, etc.)
+2. Only store in full_gb_contacts (40k contacts)
+3. DON'T insert to mn_gb_contacts_raw (only mentors)
+4. DON'T log as error (not an error, just not a mentor)
+5. Summary shows:
+   - Total contacts: 40,000
+   - Mentors matched: 450
+   - Non-mentors: 39,550 (ignored, stored in full_gb_contacts)
+```
+
+### 8. Multiple Mentors Match Same Contact
+
+**Scenario:** Two mentors somehow match same Givebutter contact
+
+```
+State:
+├─ Mentor A: phone="+15551234567"
+├─ Mentor B: phone="+15551234567" (duplicate signup)
+└─ GB Contact: phone="+15551234567"
+
+Problem:
+- Both mentors claim same contact_id
+- UNIQUE constraint on mentors.gb_contact_id will fail
+
+Solution:
+1. During matching, detect multiple mentors for same contact
+2. Log to mn_errors:
+   - error_type: 'multiple_mentors_one_contact'
+   - severity: 'error'
+   - message: "Mentors 1001, 1002 both match contact 15234567"
+3. DON'T update either mentor.gb_contact_id
+4. Require manual resolution:
+   - Determine correct mentor (check signup dates, info)
+   - Merge mentors or mark one as duplicate
+   - Then assign contact_id to canonical mentor
+```
+
+### 9. External ID Mismatch
+
+**Scenario:** Contact has external_id set to wrong mn_id
+
+```
+State:
+├─ Mentor: mn_id = "1234"
+├─ GB Contact: external_id = "9999" (wrong!)
+└─ Same phone/email
+
+Problem:
+- External ID doesn't match mn_id
+- Which is correct?
+
+Solution:
+1. Trust phone/email matching over external_id
+2. If phone matches but external_id differs:
+   - Log warning: "External ID mismatch"
+   - Use phone match as source of truth
+   - Next export will correct external_id
+3. Show in mn_errors:
+   - "Contact 15234567 has external_id=9999 but matched to mn_id=1234"
+   - "Will be corrected on next export"
+```
+
+### 10. Campaign Member Without Contact
+
+**Scenario:** Member API returns member not in contacts CSV
+
+```
+State:
+├─ Members API: member_id=789, email="mentor@example.com"
+└─ CSV: No contact with that email
+
+Problem:
+- Member exists but contact doesn't
+- Shouldn't happen (all members are contacts)
+- Indicates data inconsistency in Givebutter
+
+Solution:
+1. Log to mn_errors:
+   - error_type: 'member_without_contact'
+   - severity: 'warning'
+   - message: "Member 789 not found in contacts CSV"
+2. Member data still stored in campaign_members_raw
+3. ETL still creates mentor record
+4. Just won't have gb_contact_id until CSV updated
+5. Next fresh CSV should include them
+```
+
+---
+
+## API Endpoints
+
+### Base Structure
+
+```
+/api/sync/
+├─ initialize              (POST) Initial setup flow
+├─ run                     (POST) Periodic baseline sync
+├─ config                  (GET/POST) API configuration
+├─ test-keys               (POST) Validate API keys
+├─ discover-jotform        (POST) Discover Jotform forms
+├─ discover-givebutter     (POST) Discover GB campaigns
+└─ features/
+    ├─ csv-upload          (POST) Upload & match CSV
+    ├─ csv-status          (GET) CSV freshness & coverage
+    ├─ contact-export      (POST) Generate GB import CSV
+    ├─ text-export         (POST) Generate SMS export
+    └─ duplicates          (GET) List duplicate contacts
+```
+
+### POST /api/sync/initialize
+
+**Purpose:** Run complete initialization flow
+
+**Request:**
+```json
+{
+  "jotform_api_key": "abc123",
+  "jotform_signup_form_id": "250685983663169",
+  "jotform_setup_form_id": "250754977634066",
+  "givebutter_api_key": "xyz789",
+  "givebutter_campaign_code": "CQVG3W"
+}
+```
+
+**Flow:**
+1. Validate API keys
+2. Run baseline sync (Jotform + GB members)
+3. Run ETL
+4. Return status: "Ready for CSV upload"
+
+**Response:**
+```json
+{
+  "status": "initialized",
+  "mentors_imported": 555,
+  "requires_csv": true,
+  "message": "Upload Givebutter CSV to complete initialization"
+}
+```
+
+### POST /api/sync/run
+
+**Purpose:** Run periodic baseline sync (API-only)
+
+**Flow:**
+1. Fetch Jotform signups
+2. Fetch Jotform setup
+3. Fetch Givebutter members
+4. Run ETL
+5. Sync Givebutter contacts (via API)
+6. Update sync log
+
+**Response (SSE stream):**
+```
+data: {"step":"Jotform Signups","status":"running"}
+data: {"step":"Jotform Signups","status":"completed","message":"568 submissions synced"}
+data: {"step":"Jotform Setup","status":"running"}
+data: {"step":"Jotform Setup","status":"completed","message":"434 submissions synced"}
+data: {"step":"Givebutter Members","status":"running"}
+data: {"step":"Givebutter Members","status":"completed","message":"490 members synced"}
+data: {"step":"ETL Process","status":"running"}
+data: {"step":"ETL Process","status":"completed","message":"555 mentors processed"}
+data: {"step":"Contact Sync","status":"running"}
+data: {"step":"Contact Sync","status":"completed","message":"450 contacts synced, 12 conflicts"}
+```
+
+### POST /api/sync/features/csv-upload
+
+**Purpose:** Upload Givebutter CSV and match to mentors
+
+**Request:** Multipart form data
+```
+file: givebutter-export-2025-10-08.csv
+```
+
+**Flow:**
+1. Parse CSV (all 58 columns)
+2. Upsert to full_gb_contacts
+3. Match contacts to mentors
+4. Extract contact_ids
+5. Update mentors.gb_contact_id
+6. Store in mn_gb_contacts_raw
+7. Detect duplicates
+8. Log to csv_import_log
+
+**Response:**
+```json
+{
+  "success": true,
+  "contacts_imported": 40156,
+  "mentors_matched": 487,
+  "new_contact_ids_captured": 37,
+  "duplicates_detected": 12,
+  "csv_age_hours": 0.2,
+  "upload_id": 123
+}
+```
+
+### GET /api/sync/features/csv-status
+
+**Purpose:** Get CSV freshness and coverage stats
+
+**Response:**
+```json
+{
+  "last_upload": {
+    "timestamp": "2025-10-08T10:30:00Z",
+    "age_hours": 5.2,
+    "filename": "givebutter-export-2025-10-08.csv",
+    "total_contacts": 40156
+  },
+  "coverage": {
+    "total_mentors": 555,
+    "with_contact_id": 487,
+    "without_contact_id": 68,
+    "coverage_percent": 87.7
+  },
+  "freshness_status": "stale",  // "fresh" | "stale" | "missing"
+  "warnings": [
+    "CSV is 5 hours old. Consider uploading fresh export."
+  ]
+}
+```
+
+### POST /api/sync/features/contact-export
+
+**Purpose:** Generate Givebutter import CSV
+
+**Request:**
+```json
+{
+  "filters": {
+    "status": ["needs_page", "needs_fundraising"],  // optional
+    "shift": ["Option 1", "Option 2"]                // optional
+  },
+  "include_all": false  // true = all mentors, false = apply filters
+}
+```
+
+**Flow:**
+1. Check mn_gb_contacts_raw freshness
+2. If stale, warn but allow
+3. Generate CSV from mn_gb_import table
+4. Apply filters if specified
+5. Return CSV file
+
+**Response:** CSV file download
+
+### GET /api/sync/features/duplicates
+
+**Purpose:** List duplicate contacts needing resolution
+
+**Response:**
+```json
+{
+  "duplicates": [
+    {
+      "type": "phone",
+      "identifier": "+15551234567",
+      "count": 3,
+      "contact_ids": [11111, 22222, 33333],
+      "mentor_id": "1234",
+      "created_at": "2025-10-08T10:00:00Z",
+      "resolved": false
+    },
+    {
+      "type": "email",
+      "identifier": "mentor@example.com",
+      "count": 2,
+      "contact_ids": [44444, 55555],
+      "mentor_id": "2345",
+      "created_at": "2025-10-07T15:00:00Z",
+      "resolved": false
+    }
+  ],
+  "total_duplicate_groups": 2,
+  "total_excess_contacts": 3
+}
+```
+
+---
+
+## UI Organization
+
+### Settings Page (`/settings`)
+
+**Purpose:** Initial system configuration only
+
+**Sections:**
+
+1. **System Status**
+   ```
+   ┌────────────────────────────────────────┐
+   │ ✅ System Initialized                  │
+   │ Last initialized: Sep 15, 2025         │
+   │ Mentor coverage: 487/555 (87%)         │
+   └────────────────────────────────────────┘
+   ```
+
+2. **API Configuration**
+   ```
+   Jotform API
+   ├─ API Key: [••••••••••] [Test]
+   ├─ Signup Form: [Discover ▼] 250685983663169
+   └─ Setup Form: [Discover ▼] 250754977634066
+
+   Givebutter API
+   ├─ API Key: [••••••••••] [Test]
+   └─ Campaign: [Discover ▼] CQVG3W
+   ```
+
+3. **Automated Sync**
+   ```
+   [x] Enable automated sync
+   Run every: [6 ▼] hours
+   Last run: 2 hours ago
+   Next run: in 4 hours
+
+   [Save Configuration]
+   ```
+
+4. **Danger Zone**
+   ```
+   [Re-initialize System]  (for new year setup)
+   Warning: This will re-run initial setup flow
+   ```
+
+### Sync Page (`/sync`)
+
+**Purpose:** Monitoring and manual operations
+
+**Sections:**
+
+1. **Quick Actions**
+   ```
+   [Run Sync Now]  [Upload CSV]  [View Errors]
+   ```
+
+2. **Sync Status Dashboard**
+   ```
+   ┌─────────────────────┬─────────────────────┬─────────────────────┐
+   │ Last Baseline Sync  │ Last Contact Sync   │ Last CSV Upload     │
+   ├─────────────────────┼─────────────────────┼─────────────────────┤
+   │ ✅ 2 hours ago      │ ✅ 5 hours ago      │ ⚠️ 1 day ago        │
+   │ Duration: 45s       │ Duration: 2m 15s    │ 487 mentors matched │
+   │ 555 mentors         │ 450 contacts synced │ 12 duplicates       │
+   │ 0 errors            │ 12 conflicts        │                     │
+   └─────────────────────┴─────────────────────┴─────────────────────┘
+   ```
+
+3. **Sync Log** (paginated table)
+   ```
+   Date/Time           Type            Status      Duration  Records  Errors
+   ─────────────────────────────────────────────────────────────────────────
+   Oct 8, 10:30 AM    automated       completed   45s       555      0
+   Oct 8, 8:30 AM     automated       completed   43s       555      0
+   Oct 7, 6:15 PM     manual          completed   47s       540      2
+   Oct 7, 3:00 PM     csv_upload      completed   12s       487      0
+   Oct 7, 2:45 PM     initialization  completed   2m 15s    555      12
+   ```
+
+4. **Error Log** (filterable)
+   ```
+   [Filter: All Types ▼] [All Severity ▼] [Unresolved Only ☑]
+
+   ⚠️  Contact Data Conflict (Warning)
+   Mentor 1234 | 2 hours ago
+   Contact data differs for: phone, email
+   [View Details] [Mark Resolved]
+
+   ⚠️  Duplicate Givebutter Contact (Warning)
+   Phone +15551234567 | 1 day ago
+   3 contacts share this phone: 11111, 22222, 33333
+   [View Contacts] [Archive Duplicates] [Mark Resolved]
+   ```
+
+5. **CSV Upload Modal**
+   ```
+   Upload Latest Givebutter Export
+
+   [Drop CSV file here or click to browse]
+
+   What this does:
+   • Matches contacts to mentors
+   • Captures new contact IDs
+   • Detects duplicate contacts
+   • Updates contact data
+
+   Last upload: 1 day ago (stale)
+   Coverage: 487/555 mentors (87%)
+
+   [Cancel] [Upload]
+   ```
+
+### Mentors Page (`/mentors`)
+
+**Purpose:** Mentor management and contact operations
+
+**Sections:**
+
+1. **Toolbar**
+   ```
+   [Upload CSV]  [Generate Contact Import]  [Export All Mentors]
+   ```
+
+2. **CSV Status Banner** (if stale)
+   ```
+   ⚠️ Contact data is stale (last updated 2 days ago)
+   Some operations require fresh CSV data.
+   [Upload Latest CSV]
+   ```
+
+3. **Mentors Table**
+   ```
+   MN ID  Name         Status              GB Sync             Actions
+   ──────────────────────────────────────────────────────────────────
+   1001   Alice        ✅ Complete         ✅ Synced 2h ago    [View]
+   1002   Bob          📄 Needs Page       ⚠️ Conflicts        [Review]
+   1003   Carol        💰 Fundraising      ✅ Synced 5h ago    [View]
+   1004   Dave         ⚙️ Needs Setup      ❌ No contact ID    [View]
+   ```
+
+4. **Contact Import Generation**
+   ```
+   Generate Givebutter Contact Import
+
+   Include mentors with status:
+   [x] Needs Setup
+   [x] Needs Page
+   [x] Needs Fundraising
+   [x] Complete
+
+   Format: [Givebutter CSV Import ▼]
+
+   This will generate CSV with:
+   • Contact IDs (for existing contacts)
+   • External IDs (mn_id for linking)
+   • Updated custom fields
+   • Current tags
+
+   [Cancel] [Generate CSV]
+   ```
+
+### Communications Page (`/communications`)
+
+**Purpose:** Text message campaigns
+
+**Sections:**
+
+1. **CSV Status** (required for text campaigns)
+   ```
+   📊 Contact Data Status
+   Last CSV upload: 2 hours ago ✅ Fresh
+   Coverage: 487/555 mentors (87%)
+
+   [Upload Latest CSV]
+   ```
+
+2. **New Campaign Builder**
+   ```
+   Campaign Name: [Fall 2025 Reminder]
+
+   Recipients:
+   [x] Needs Setup (165 mentors)
+   [x] Needs Page (21 mentors)
+   [ ] Needs Fundraising (327 mentors)
+   [ ] Complete (42 mentors)
+
+   Total recipients: 186 mentors
+
+   Message Preview:
+   ┌────────────────────────────────────┐
+   │ Hi {preferred_name}! This is SWAB. │
+   │ Don't forget to complete your      │
+   │ fundraising page setup.            │
+   └────────────────────────────────────┘
+
+   [Cancel] [Generate Export]
+   ```
+
+3. **Campaign History**
+   ```
+   Date          Campaign             Recipients  Status
+   ───────────────────────────────────────────────────────
+   Oct 8, 2025   Fall Reminder        186         Sent
+   Oct 1, 2025   Initial Outreach     555         Sent
+   Sep 15, 2025  Welcome Message      520         Sent
+   ```
+
+---
+
+## Implementation Phases
+
+### Phase 1: CSV Upload & Contact Matching
+
+**Goal:** Enable CSV upload with full matching logic
+
+**Tasks:**
+1. Create migration for `mn_gb_contacts_raw` table
+2. Create migration for `csv_import_log` table
+3. Update `full_gb_contacts` schema (add all 58 columns)
+4. Implement CSV parser (parse all Givebutter columns)
+5. Build matching algorithm (phone → email → member_id)
+6. Build duplicate detection logic
+7. Create `POST /api/sync/features/csv-upload` endpoint
+8. Update `mn_errors` logging for duplicates
+9. Build CSV upload UI component (reusable)
+10. Add CSV status indicator component
+11. Test with real Givebutter export
+
+**Success Criteria:**
+- Upload CSV with 40k contacts
+- Match 450+ mentors
+- Detect duplicates correctly
+- Store in both `full_gb_contacts` and `mn_gb_contacts_raw`
+- Update `mentors.gb_contact_id`
+
+### Phase 2: Contact Sync via API
+
+**Goal:** Enable automated contact sync during periodic sync
+
+**Tasks:**
+1. Add contact sync step to periodic sync flow
+2. Implement `GET /contacts/{id}` API integration
+3. Build conflict detection logic
+4. Build sync-back logic (preferred name, etc.)
+5. Add rate limiting (daily schedule for contact sync)
+6. Update `mn_gb_contacts_raw` from API responses
+7. Log conflicts to `mn_errors`
+8. Update sync log with contact sync statistics
+9. Add contact sync status to Sync page dashboard
+10. Test with 555 mentors
+
+**Success Criteria:**
+- 450 contacts synced via API
+- Conflicts detected and logged
+- Preferred name updates synced back
+- No rate limit errors
+- mn_gb_contacts_raw stays fresh
+
+### Phase 3: UI Components & Monitoring
+
+**Goal:** Build monitoring and status displays
+
+**Tasks:**
+1. Sync page dashboard (sync status, CSV status, errors)
+2. CSV freshness indicators (age, coverage %)
+3. Mentor table GB sync column
+4. Conflict detail modal
+5. Error log viewer with filters
+6. CSV upload modal (with validation)
+7. Duplicate contacts viewer
+8. Settings page updates (automated sync config)
+9. Test all UI flows
+
+**Success Criteria:**
+- Clear visibility into sync status
+- CSV age warnings working
+- Conflicts reviewable
+- Manual CSV upload working from UI
+
+### Phase 4: Export Features
+
+**Goal:** Enable contact export and text campaign exports
+
+**Tasks:**
+1. `GET /api/sync/features/csv-status` endpoint
+2. `POST /api/sync/features/contact-export` endpoint
+3. `POST /api/sync/features/text-export` endpoint
+4. `GET /api/sync/features/duplicates` endpoint
+5. Contact export UI (Mentors page)
+6. Text campaign builder UI (Communications page)
+7. Export download handling
+8. Filter logic (by status, shift, etc.)
+9. Test exports with Givebutter import
+
+**Success Criteria:**
+- Generate valid Givebutter import CSV
+- Existing contacts updated (not duplicated)
+- Text campaign exports filtered correctly
+- Downloads work reliably
+
+### Phase 5: Documentation & Polish
+
+**Goal:** Document system and polish UX
+
+**Tasks:**
+1. User documentation (how to use each feature)
+2. Technical documentation (API specs, schemas)
+3. Scenario walkthroughs (with screenshots)
+4. Edge case handling guide
+5. Error message improvements
+6. Loading states and progress indicators
+7. Form validation
+8. Accessibility improvements
+9. Mobile responsiveness
+10. Testing with real data
+
+**Success Criteria:**
+- Complete user guide
+- All flows documented
+- Edge cases tested
+- Production-ready UX
+
+---
+
+## Key Design Decisions
+
+### 1. Two Contact Tables (full vs mentor-only)
+
+**Decision:** Maintain both `full_gb_contacts` and `mn_gb_contacts_raw`
+
+**Rationale:**
+- `full_gb_contacts`: Haystack (40k contacts, mostly non-mentors)
+  - Used for matching, duplicate detection, historical reference
+  - Not continuously updated (snapshot from CSV)
+- `mn_gb_contacts_raw`: Needles (555 mentors only)
+  - Used for sync, conflict detection, export preparation
+  - Continuously updated via API
+  - Always linked to mentors table
+
+**Alternative Considered:** Single table with `mn_id` nullable
+- Rejected: Mixing 40k unrelated contacts with 555 mentor contacts is messy
+- Rejected: Querying becomes complex (always need WHERE mn_id IS NOT NULL)
+
+### 2. CSV for ID Discovery, API for Data Sync
+
+**Decision:** Use CSV to establish contact_ids, then sync via API
+
+**Rationale:**
+- CSV limitations: Snapshot in time, manual process, can be stale
+- API advantages: Real-time, automated, always current
+- CSV necessity: Only way to get contact_id for members
+- Best of both: CSV for initial mapping, API for ongoing sync
+
+**Alternative Considered:** CSV-only sync
+- Rejected: Would require manual CSV uploads frequently
+- Rejected: Can't automate, data always potentially stale
+
+**Alternative Considered:** API-only sync
+- Rejected: No way to get contact_id from members API
+- Rejected: Can't match returning mentors without CSV
+
+### 3. mn_gb_import Regenerated vs Persistent
+
+**Decision:** Clear and rebuild `mn_gb_import` after every ETL
+
+**Rationale:**
+- Always reflects current state of `mentors` + `mn_tasks`
+- No risk of stale data in export
+- Simple logic: generate from source tables
+- No need to track "needs_sync" flags
+
+**Alternative Considered:** Persistent with needs_sync flags
+- Rejected: Complex logic to track what changed
+- Rejected: Risk of stale data if flag logic has bugs
+- Rejected: Harder to debug (when was this row generated?)
+
+### 4. Field Ownership (Jotform vs Givebutter)
+
+**Decision:** Jotform owns identity, Givebutter can update preferences
+
+**Rationale:**
+- Signup is source of truth for identity (phone, name, email)
+- Admin corrections in GB should be allowed for preferences
+- Custom fields computed from our data (one-way export)
+- Clear rules prevent merge conflicts
+
+**Alternative Considered:** Givebutter always wins
+- Rejected: Would allow identity drift from signups
+- Rejected: Could break deduplication logic
+
+**Alternative Considered:** Manual resolution for all conflicts
+- Rejected: Too much admin overhead
+- Rejected: Automated sync becomes useless
+
+### 5. Preferred Name Always Populated
+
+**Decision:** `preferred_name = prefix || first_name` (always set)
+
+**Rationale:**
+- Eliminates need for display_name field
+- Simplifies UI (just use preferred_name everywhere)
+- Clear logic: use what they go by, fallback to legal name
+- No null handling needed
+
+**Alternative Considered:** preferred_name nullable
+- Rejected: UI code needs null checks everywhere
+- Rejected: Redundant with display_name field
+- Rejected: Confusing when to use which field
+
+### 6. External ID = mn_id
+
+**Decision:** Use `Contact External ID` field to store mn_id
+
+**Rationale:**
+- Establishes link between our system and Givebutter
+- Allows matching by external_id in future uploads
+- Easier to identify contacts in Givebutter UI
+- Standard practice for external integrations
+
+**Alternative Considered:** Don't use external_id
+- Rejected: Matching becomes harder (phone/email only)
+- Rejected: No way to identify our contacts in GB UI
+- Rejected: Miss opportunity for bidirectional linking
+
+### 7. Custom Fields as JSONB
+
+**Decision:** Store all custom fields in JSONB column
+
+**Rationale:**
+- Custom fields can change (configured in custom-fields.json)
+- Don't want to alter schema when config changes
+- Easy to add new custom fields without migration
+- Flexible querying with JSONB operators
+
+**Alternative Considered:** Individual columns for each custom field
+- Rejected: Requires migration for each new field
+- Rejected: Schema becomes huge and brittle
+- Rejected: Harder to loop through fields dynamically
+
+### 8. Amount Raised from Members API
+
+**Decision:** Get fundraising amounts from `campaign_members_raw`, not contacts
+
+**Rationale:**
+- Members API provides `amount_raised` field
+- Contacts API doesn't have fundraising amounts
+- Members is the right source for campaign-specific data
+- Contacts are organization-wide, members are campaign-specific
+
+**Alternative Considered:** Get from contacts custom fields
+- Rejected: Custom fields might not be updated
+- Rejected: Members API is source of truth for fundraising
+- Rejected: Would need to parse custom field values
+
+### 9. Duplicate Detection Not Auto-Resolved
+
+**Decision:** Detect duplicates, log to errors, require manual resolution
+
+**Rationale:**
+- Can't automatically determine which contact is canonical
+- Admin context needed (which has correct info?)
+- Archiving wrong contact could lose data
+- Better to surface for review than silently resolve
+
+**Alternative Considered:** Auto-pick highest contact_id
+- Rejected: Might not be the right contact
+- Rejected: Could archive contact with important data
+- Rejected: No user visibility into decision
+
+### 10. Scheduling Strategy
+
+**Decision:** Store config in `sync_config`, manual trigger for now, automation later
+
+**Rationale:**
+- Phase 1: Focus on sync logic, not scheduling
+- Phase 2: Add actual cron/scheduler
+- Config table prepares for automation
+- Manual trigger allows testing and control
+
+**Alternatives for Phase 2:**
+- Vercel Cron (if deploying to Vercel)
+- pg_cron (PostgreSQL extension)
+- External service (Zapier, Cron-job.org)
+- Custom Node.js scheduler
+
+---
+
+## Conclusion
+
+This architecture provides:
+
+✅ **Separation of Concerns**
+- Automated baseline sync (API-only)
+- Manual CSV operations (ID discovery, features)
+- Clear boundaries between tiers
+
+✅ **Handles API Limitations**
+- Works around lack of contact_id in members API
+- Uses CSV only when necessary
+- API for continuous sync where possible
+
+✅ **Scalable & Maintainable**
+- Clear data flows
+- Single source of truth (mentors table)
+- Conflict detection and logging
+- Edge cases handled gracefully
+
+✅ **User-Friendly**
+- Clear status indicators
+- CSV freshness warnings
+- Conflict review UI
+- Automated where possible, manual when needed
+
+**Next Steps:** Begin Phase 1 implementation after final review and approval of this architecture.
+
+---
+
+**Document Version:** 1.0
+**Authors:** Caleb Sandler, Claude (Anthropic)
+**Review Status:** Pending approval before implementation

@@ -331,6 +331,13 @@ npm run admin:check-env
 ## File Structure
 
 ```
+├── src/                         # Frontend application
+│   ├── app/                     # Next.js app router pages
+│   ├── components/              # React components
+│   │   ├── layout/              # Navigation components
+│   │   ├── providers/           # Context providers
+│   │   └── ui/                  # Reusable UI components
+│   └── lib/                     # Frontend utilities
 ├── backend/                     # Backend logic & data pipeline
 │   ├── core/                    # Core ETL & data pipeline
 │   │   ├── config/              # Configuration (supabase, custom fields, tags)
@@ -343,8 +350,6 @@ npm run admin:check-env
 │   │   ├── supabase/            # Supabase client utilities
 │   │   └── utilities/           # Tools (check-env, verify-data)
 │   └── data/                    # Generated CSV exports
-├── app/                         # Next.js app router pages
-├── components/                  # React components
 ├── supabase/
 │   └── migrations/              # Database schema migrations
 └── docs/                        # Documentation

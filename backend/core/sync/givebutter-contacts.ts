@@ -18,17 +18,17 @@ import { getSupabaseConfig } from '../config/supabase';
 
 dotenv.config({ path: resolve(process.cwd(), '.env.local') });
 
-const CSV_PATH = resolve(process.cwd(), 'data/givebutter-contacts-export.csv');
+const CSV_PATH = resolve(process.cwd(), 'backend/data/givebutter-contacts-export.csv');
 const BATCH_SIZE = 100;
 
 interface ContactRow {
-  contactId: number;
-  firstName: string;
-  lastName: string;
-  primaryEmail: string;
-  primaryPhone: string;
+  contact_id: number;
+  first_name: string;
+  last_name: string;
+  primary_email: string;
+  primary_phone: string;
   tags: string[];
-  customFields: Record<string, any>;
+  custom_fields: Record<string, any>;
 }
 
 async function syncContacts() {
@@ -141,13 +141,13 @@ async function syncContacts() {
       : [];
 
     batch.push({
-      contactId,
-      firstName: row['First Name'] || null,
-      lastName: row['Last Name'] || null,
-      primaryEmail: row['Primary Email'] || null,
-      primaryPhone: row['Primary Phone'] || null,
+      contact_id: contactId,
+      first_name: row['First Name'] || null,
+      last_name: row['Last Name'] || null,
+      primary_email: row['Primary Email'] || null,
+      primary_phone: row['Primary Phone'] || null,
       tags,
-      customFields,
+      custom_fields: customFields,
     });
 
     // Process batch when full

@@ -70,7 +70,7 @@ Generates Givebutter-compatible CSV from `mn_gb_import`:
 - Includes all emoji custom fields (📝 💸 📆 👯‍♂️ 🚂 📈 📱)
 - Ready for direct import to Givebutter
 
-**Output:** `data/givebutter-import-YYYY-MM-DD.csv`
+**Output:** `backend/data/givebutter-import-YYYY-MM-DD.csv`
 
 ### 5. Validate CSV
 ```bash
