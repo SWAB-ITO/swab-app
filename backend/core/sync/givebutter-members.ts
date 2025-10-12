@@ -128,7 +128,7 @@ async function syncMembers() {
 
         // Upsert (insert or update if member_id exists)
         const { error } = await supabase
-          .from('campaign_members_raw')
+          .from('raw_gb_campaign_members')
           .upsert(parsed, {
             onConflict: 'member_id',
           });

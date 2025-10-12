@@ -136,7 +136,7 @@ async function syncSignups() {
 
         // Upsert (insert or update if submission_id exists)
         const { error } = await supabase
-          .from('mn_signups_raw')
+          .from('raw_mn_signups')
           .upsert(parsed, {
             onConflict: 'submission_id',
           });

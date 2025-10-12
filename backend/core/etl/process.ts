@@ -240,24 +240,53 @@ async function etlProcess() {
   // ============================================================================
   console.log('📥 Loading raw data...\n');
 
+  // Load most tables normally
   const [
     { data: rawSignups, error: signupsError },
     { data: rawSetup, error: setupError },
     { data: rawMembers, error: membersError },
-    { data: rawContacts, error: contactsError },
+    { data: rawMnGbContacts, error: mnGbContactsError },
   ] = await Promise.all([
-    supabase.from('mn_signups_raw').select('*'),
-    supabase.from('funds_setup_raw').select('*'),
-    supabase.from('campaign_members_raw').select('*'),
-    supabase.from('full_gb_contacts').select('*'),
+    supabase.from('raw_mn_signups').select('*'),
+    supabase.from('raw_mn_funds_setup').select('*'),
+    supabase.from('raw_gb_campaign_members').select('*').range(0, 10000),
+    supabase.from('raw_mn_gb_contacts').select('mn_id, contact_id'),
   ]);
 
-  if (signupsError || setupError || membersError || contactsError) {
+  // Load ALL contacts with pagination (Supabase limit is 1000 per request)
+  let rawContacts: any[] = [];
+  let contactsError = null;
+  let page = 0;
+  const pageSize = 1000;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from('raw_gb_full_contacts')
+      .select('*')
+      .range(page * pageSize, (page + 1) * pageSize - 1);
+
+    if (error) {
+      contactsError = error;
+      break;
+    }
+
+    if (!data || data.length === 0) break;
+
+    rawContacts.push(...data);
+
+    if (data.length < pageSize) break; // Last page
+    page++;
+  }
+
+  console.log(`   Loaded ${rawContacts.length} contacts (paginated)...\n`);
+
+  if (signupsError || setupError || membersError || contactsError || mnGbContactsError) {
     console.error('❌ Error loading raw data');
     if (signupsError) console.error('Signups:', signupsError);
     if (setupError) console.error('Setup:', setupError);
     if (membersError) console.error('Members:', membersError);
     if (contactsError) console.error('Contacts:', contactsError);
+    if (mnGbContactsError) console.error('MN-GB Contacts:', mnGbContactsError);
     process.exit(1);
   }
 
@@ -265,7 +294,8 @@ async function etlProcess() {
   console.log(`   Signups: ${rawSignups?.length || 0}`);
   console.log(`   Setup: ${rawSetup?.length || 0}`);
   console.log(`   Members: ${rawMembers?.length || 0}`);
-  console.log(`   Contacts: ${rawContacts?.length || 0}\n`);
+  console.log(`   Contacts: ${rawContacts?.length || 0}`);
+  console.log(`   Matched Contacts: ${rawMnGbContacts?.length || 0}\n`);
 
   // ============================================================================
   // STEP 2: Validate mn_id presence
@@ -287,7 +317,7 @@ async function etlProcess() {
         error_type: 'missing_mn_id',
         error_message: `Signup ${signup.submission_id} missing mn_id from Jotform. Assigned placeholder: ${placeholderId}`,
         severity: 'critical',
-        source_table: 'mn_signups_raw',
+        source_table: 'raw_mn_signups',
         raw_data: signup,
       });
 
@@ -327,7 +357,7 @@ async function etlProcess() {
           error_type: 'duplicate_signup',
           error_message: `Duplicate signup detected: ${dupMsg}. Kept most recent submission.`,
           severity: 'warning',
-          source_table: 'mn_signups_raw',
+          source_table: 'raw_mn_signups',
           raw_data: { kept: signup.submission_id, discarded: existing.submission_id },
         });
       }
@@ -343,7 +373,7 @@ async function etlProcess() {
         error_type: 'duplicate_signup',
         error_message: `Duplicate signup detected: ${dupMsg}. Kept most recent submission.`,
         severity: 'warning',
-        source_table: 'mn_signups_raw',
+        source_table: 'raw_mn_signups',
         raw_data: { kept: existing.submission_id, discarded: signup.submission_id },
       });
     }
@@ -352,6 +382,51 @@ async function etlProcess() {
   const uniqueSignups = Array.from(phoneToSignup.values());
   console.log(`✅ ${validSignups.length} signups → ${uniqueSignups.length} unique by phone`);
   console.log(`   Duplicates removed: ${duplicates.length}\n`);
+
+  // ============================================================================
+  // STEP 3.5: Load existing mentors to preserve gb_contact_id
+  // ============================================================================
+  console.log('📥 Loading existing mentors to preserve contact IDs...\n');
+
+  const { data: existingMentors } = await supabase
+    .from('mentors')
+    .select('mn_id, gb_contact_id, gb_member_id');
+
+  const existingContactIds = new Map(existingMentors?.map(m => [m.mn_id, m.gb_contact_id]) || []);
+  const existingMemberIds = new Map(existingMentors?.map(m => [m.mn_id, m.gb_member_id]) || []);
+
+  console.log(`   Found ${existingContactIds.size} existing mentors with data to preserve\n`);
+
+  // ============================================================================
+  // STEP 3.6: Build lookup maps for O(1) matching (instead of O(N*M))
+  // ============================================================================
+  console.log('🗺️  Building lookup maps for fast matching...\n');
+
+  // Phone lookup: phone → contact
+  const phoneToContact = new Map<string, RawContact>();
+  for (const contact of (rawContacts as RawContact[] || [])) {
+    const normPhone = normalizePhone(contact.primary_phone);
+    if (normPhone && !phoneToContact.has(normPhone)) {
+      phoneToContact.set(normPhone, contact);
+    }
+  }
+
+  // Email lookup: email → contacts (array because multiple contacts can have same email)
+  const emailToContacts = new Map<string, RawContact[]>();
+  for (const contact of (rawContacts as RawContact[] || [])) {
+    if (contact.primary_email) {
+      const normEmail = normalizeEmail(contact.primary_email);
+      if (normEmail) {
+        if (!emailToContacts.has(normEmail)) {
+          emailToContacts.set(normEmail, []);
+        }
+        emailToContacts.get(normEmail)!.push(contact);
+      }
+    }
+  }
+
+  console.log(`   Phone lookup: ${phoneToContact.size} unique phones`);
+  console.log(`   Email lookup: ${emailToContacts.size} unique emails\n`);
 
   // ============================================================================
   // STEP 4: Process each unique mentor
@@ -372,7 +447,7 @@ async function etlProcess() {
         error_type: 'invalid_phone',
         error_message: `Phone number could not be normalized: ${signup.phone}`,
         severity: 'error',
-        source_table: 'mn_signups_raw',
+        source_table: 'raw_mn_signups',
         raw_data: signup,
       });
       continue;
@@ -389,43 +464,50 @@ async function etlProcess() {
 
     const fullName = buildFullName(signup);
 
-    // Match to Givebutter contact (phone first, then email)
+    // Match to Givebutter contact
+    // Priority 1: Check raw_mn_gb_contacts (already matched via CSV upload)
+    // Priority 2: Try to match from raw_gb_full_contacts (phone/email)
     let gbContactId: number | undefined;
     let gbMemberId: number | undefined;
 
-    // Try phone match
-    const contactByPhone = (rawContacts as RawContact[] || []).find(c => {
-      const cPhone = normalizePhone(c.primary_phone);
-      return cPhone && cPhone === normPhone;
-    });
-
-    if (contactByPhone) {
-      gbContactId = contactByPhone.contact_id;
+    // First, check if we already have a matched contact for this mentor
+    const existingMatch = (rawMnGbContacts || []).find(c => c.mn_id === signup.mn_id);
+    if (existingMatch) {
+      gbContactId = existingMatch.contact_id;
     } else {
-      // Try email match (prioritize personal, then UGA)
-      const normPersonalEmail = normalizeEmail(signup.personal_email);
-      const normUgaEmail = normalizeEmail(signup.uga_email);
+      // Try phone match using O(1) lookup
+      const contactByPhone = phoneToContact.get(normPhone);
 
-      const contactsByEmail = (rawContacts as RawContact[] || []).filter(c => {
-        if (!c.primary_email) return false;
-        const normContactEmail = normalizeEmail(c.primary_email);
-        return normContactEmail === normPersonalEmail || normContactEmail === normUgaEmail;
-      });
+      if (contactByPhone) {
+        gbContactId = contactByPhone.contact_id;
+      } else {
+        // Try email match using O(1) lookup (check both personal and UGA)
+        const normPersonalEmail = normalizeEmail(signup.personal_email);
+        const normUgaEmail = normalizeEmail(signup.uga_email);
 
-      if (contactsByEmail.length > 0) {
-        // Pick highest contact_id (most recent)
-        contactsByEmail.sort((a, b) => b.contact_id - a.contact_id);
-        gbContactId = contactsByEmail[0].contact_id;
+        let contactsByEmail: RawContact[] = [];
+        if (normPersonalEmail) {
+          contactsByEmail = emailToContacts.get(normPersonalEmail) || [];
+        }
+        if (contactsByEmail.length === 0 && normUgaEmail) {
+          contactsByEmail = emailToContacts.get(normUgaEmail) || [];
+        }
 
-        if (contactsByEmail.length > 1) {
-          errors.push({
-            mn_id: signup.mn_id,
-            error_type: 'multiple_contacts',
-            error_message: `Found ${contactsByEmail.length} Givebutter contacts for this email`,
-            severity: 'warning',
-            source_table: 'full_gb_contacts',
-            raw_data: { contacts: contactsByEmail.map(c => c.contact_id) },
-          });
+        if (contactsByEmail.length > 0) {
+          // Pick highest contact_id (most recent)
+          contactsByEmail.sort((a, b) => b.contact_id - a.contact_id);
+          gbContactId = contactsByEmail[0].contact_id;
+
+          if (contactsByEmail.length > 1) {
+            errors.push({
+              mn_id: signup.mn_id,
+              error_type: 'multiple_contacts',
+              error_message: `Found ${contactsByEmail.length} Givebutter contacts for this email`,
+              severity: 'warning',
+              source_table: 'raw_gb_full_contacts',
+              raw_data: { contacts: contactsByEmail.map(c => c.contact_id) },
+            });
+          }
         }
       }
     }
@@ -438,7 +520,7 @@ async function etlProcess() {
       return (sPhone && sPhone === normPhone) || (sEmail && sEmail === normUgaEmail);
     });
 
-    // Match to campaign member
+    // Match to campaign member (only gives us member_id, NOT contact_id)
     const memberMatch = (rawMembers as RawMember[] || []).find(m => {
       const mPhone = normalizePhone(m.phone);
       const mEmail = normalizeEmail(m.email);
@@ -481,11 +563,17 @@ async function etlProcess() {
     const statusText = getStatusText(statusCategory);
 
     // Build mentor record
+    // CRITICAL: Preserve existing gb_contact_id if we don't have a new one
+    const preservedContactId = existingContactIds.get(signup.mn_id!);
+    const preservedMemberId = existingMemberIds.get(signup.mn_id!);
+
     const mentor: Mentor = {
       mn_id: signup.mn_id!,
       phone: normPhone,
-      gb_contact_id: gbContactId,
-      gb_member_id: gbMemberId,
+      // Use new contact_id if found, otherwise preserve existing
+      gb_contact_id: gbContactId || preservedContactId,
+      // Use new member_id if found, otherwise preserve existing
+      gb_member_id: gbMemberId || preservedMemberId,
 
       first_name: firstName,
       middle_name: middleName,
@@ -523,22 +611,23 @@ async function etlProcess() {
   // ============================================================================
   console.log('💾 Upserting to main tables...\n');
 
-  // Clear existing data (fresh start)
-  // First clear FK references in campaign_members_raw
-  await supabase.from('campaign_members_raw').update({ mn_id: null }).not('mn_id', 'is', null);
+  // IMPORTANT: Use UPSERT instead of DELETE+INSERT to preserve raw_mn_gb_contacts FK relationships
+  // If we delete mentors, CASCADE DELETE will wipe out raw_mn_gb_contacts!
 
-  // Then delete main tables (tasks first due to FK)
+  // Clear FK references in raw_gb_campaign_members first
+  await supabase.from('raw_gb_campaign_members').update({ mn_id: null }).not('mn_id', 'is', null);
+
+  // Delete tasks (safe to delete, no FK dependencies)
   await supabase.from('mn_tasks').delete().gte('mn_id', '');
-  await supabase.from('mentors').delete().gte('mn_id', '');
 
-  // Insert mentors FIRST
-  const mentorsResult = await supabase.from('mentors').insert(mentors);
+  // UPSERT mentors (preserves FK relationships)
+  const mentorsResult = await supabase.from('mentors').upsert(mentors, { onConflict: 'mn_id' });
   if (mentorsResult.error) {
-    console.error('❌ Mentors error:', mentorsResult.error);
+    console.error('❌ Mentors upsert error:', mentorsResult.error);
     process.exit(1);
   }
 
-  // Then insert tasks
+  // Insert tasks
   const tasksResult = await supabase.from('mn_tasks').insert(mentorTasks);
   if (tasksResult.error) {
     console.error('❌ Tasks error:', tasksResult.error);
@@ -554,28 +643,22 @@ async function etlProcess() {
   // ============================================================================
   console.log('🔍 Detecting Givebutter duplicate contacts...\n');
 
-  // Group contacts by phone and email
-  const phoneToContacts = new Map<string, RawContact[]>();
-  const emailToContacts = new Map<string, RawContact[]>();
-
+  // NOTE: Reusing lookup maps from STEP 3.6 (phoneToContact, emailToContacts)
+  // We need to rebuild phoneToContacts as array map for duplicate detection
+  const phoneToContactsArray = new Map<string, RawContact[]>();
   (rawContacts as RawContact[] || []).forEach(contact => {
     if (contact.primary_phone) {
       const normPhone = normalizePhone(contact.primary_phone);
       if (normPhone) {
-        if (!phoneToContacts.has(normPhone)) phoneToContacts.set(normPhone, []);
-        phoneToContacts.get(normPhone)!.push(contact);
+        if (!phoneToContactsArray.has(normPhone)) phoneToContactsArray.set(normPhone, []);
+        phoneToContactsArray.get(normPhone)!.push(contact);
       }
-    }
-    if (contact.primary_email) {
-      const email = contact.primary_email.toLowerCase().trim();
-      if (!emailToContacts.has(email)) emailToContacts.set(email, []);
-      emailToContacts.get(email)!.push(contact);
     }
   });
 
   // Find duplicates
   let duplicateContactCount = 0;
-  for (const [phone, contacts] of phoneToContacts) {
+  for (const [phone, contacts] of phoneToContactsArray) {
     if (contacts.length > 1) {
       duplicateContactCount++;
       errors.push({
@@ -583,7 +666,7 @@ async function etlProcess() {
         error_type: 'duplicate_gb_contact',
         error_message: `${contacts.length} Givebutter contacts share phone ${phone}: contact IDs ${contacts.map(c => c.contact_id).join(', ')}. Manual consolidation needed.`,
         severity: 'warning',
-        source_table: 'full_gb_contacts',
+        source_table: 'raw_gb_full_contacts',
         raw_data: { contacts },
       });
     }
@@ -604,7 +687,7 @@ async function etlProcess() {
           error_type: 'duplicate_gb_contact',
           error_message: `${contacts.length} Givebutter contacts share email ${email}: contact IDs ${contacts.map(c => c.contact_id).join(', ')}. Manual consolidation needed.`,
           severity: 'warning',
-          source_table: 'full_gb_contacts',
+          source_table: 'raw_gb_full_contacts',
           raw_data: { contacts },
         });
       }
@@ -707,11 +790,11 @@ async function etlProcess() {
   }
 
   // ============================================================================
-  // STEP 8: Link campaign_members_raw to mentors
+  // STEP 8: Link raw_gb_campaign_members to mentors
   // ============================================================================
   console.log('🔗 Linking campaign members to mentors...\n');
 
-  // Call SQL function to update campaign_members_raw.mn_id
+  // Call SQL function to update raw_gb_campaign_members.mn_id
   const { data: linkedCount, error: linkError } = await supabase.rpc('link_campaign_members_to_mentors');
 
   if (linkError) {

@@ -45,9 +45,9 @@ async function syncContacts() {
   console.log('📋 Loading mentor identifiers...\n');
 
   const [{ data: signups }, { data: setup }, { data: members }] = await Promise.all([
-    supabase.from('mn_signups_raw').select('uga_email, personal_email, phone'),
-    supabase.from('funds_setup_raw').select('email, phone'),
-    supabase.from('campaign_members_raw').select('email, phone')
+    supabase.from('raw_mn_signups').select('uga_email, personal_email, phone'),
+    supabase.from('raw_mn_funds_setup').select('email, phone'),
+    supabase.from('raw_gb_campaign_members').select('email, phone')
   ]);
 
   const mentorEmails = new Set<string>();
@@ -91,7 +91,7 @@ async function syncContacts() {
 
     try {
       const { error } = await supabase
-        .from('full_gb_contacts')
+        .from('raw_gb_full_contacts')
         .upsert(batch, { onConflict: 'contact_id' });
 
       if (error) {
