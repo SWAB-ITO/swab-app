@@ -1,287 +1,213 @@
 /**
- * API-BASED CONTACT SYNC
+ * TAG-BASED CONTACT SYNC
  *
- * Syncs mentor contacts from Givebutter API to raw_mn_gb_contacts table
- * Implements conflict detection and field ownership rules
- *
- * This is Tier 2 of the sync architecture (periodic sync)
+ * Syncs all contacts with "Mentors 2025" tag from Givebutter API to raw_gb_full_contacts
  *
  * Flow:
- * 1. Load all mentors with gb_contact_id
- * 2. For each mentor, GET /contacts/{id} from Givebutter
- * 3. Upsert to raw_mn_gb_contacts
- * 4. Detect conflicts using field ownership rules
- * 5. Sync back allowed fields (preferred_name, etc.)
- * 6. Log conflicts to mn_errors
+ * 1. Read tag filter from sync_config ("Mentors 2025")
+ * 2. Query Givebutter API: GET /contacts?tags=Mentors+2025
+ * 3. Upsert all results to raw_gb_full_contacts
+ * 4. This keeps our contact list current without needing CSV uploads
  *
  * Usage: npm run sync:api-contacts
  */
 
-import dotenv from 'dotenv';
+import { config as dotenvConfig } from 'dotenv';
 import { resolve } from 'path';
 import { createClient } from '@supabase/supabase-js';
 import { getSupabaseConfig } from '../config/supabase';
-import { ConflictDetector } from '../../lib/services/conflict-detection';
-import type { Mentor } from '../../lib/services/contact-matching';
+import { GivebutterClient } from '../../lib/infrastructure/clients/givebutter-client';
+import { Logger } from '../../lib/utils/logger';
 
-dotenv.config({ path: resolve(process.cwd(), '.env.local') });
+dotenvConfig({ path: resolve(process.cwd(), '.env.local') });
 
-interface GivebutterContactResponse {
-  id: number;
-  external_id?: string;
-  prefix?: string;
-  first_name?: string;
-  middle_name?: string;
-  last_name?: string;
-  suffix?: string;
-  date_of_birth?: string;
-  gender?: string;
-  employer?: string;
-  title?: string;
-  primary_email?: string;
-  additional_emails?: string[];
-  primary_phone?: string;
-  additional_phones?: string[];
-  address_line_1?: string;
-  address_line_2?: string;
-  city?: string;
-  state?: string;
-  postal_code?: string;
-  country?: string;
-  website?: string;
-  twitter?: string;
-  linkedin?: string;
-  facebook?: string;
-  tags?: string[];
-  notes?: string;
-  household_id?: string;
-  household?: string;
-  household_primary_contact?: boolean;
-  custom_fields?: Record<string, any>;
-  updated_at?: string;
-  created_at?: string;
-}
-
-async function sleep(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function syncGivebutterContactsAPI() {
-  console.log('\n' + '='.repeat(80));
-  console.log('🔄 SYNC: Givebutter Contacts (API) → raw_mn_gb_contacts');
-  console.log('='.repeat(80) + '\n');
+async function syncGivebutterContactsByTag() {
+  const logger = new Logger('TagContactSync');
+  logger.info('Starting tag-based Givebutter contact sync');
 
   const config = getSupabaseConfig();
   const supabase = createClient(config.url, config.serviceRoleKey || config.anonKey);
 
-  // Get API key from sync_config
+  // ============================================================================
+  // STEP 1: Get configuration
+  // ============================================================================
   const { data: syncConfig, error: configError } = await supabase
     .from('sync_config')
-    .select('givebutter_api_key')
+    .select('givebutter_api_key, current_tag_filter')
     .eq('id', 1)
     .single();
 
   if (configError || !syncConfig?.givebutter_api_key) {
-    console.error('❌ Error: Givebutter API key not configured');
-    console.log('   Run sync:init to configure API keys\n');
+    logger.error('Sync configuration not found');
+    console.log('❌ Error: Givebutter API key not configured\n');
     process.exit(1);
   }
 
-  const GIVEBUTTER_API_KEY = syncConfig.givebutter_api_key;
+  const tagFilter = syncConfig.current_tag_filter || 'Mentors 2025';
+  logger.info(`Tag filter: ${tagFilter}`);
+
+  // Initialize Givebutter client
+  const gbClient = new GivebutterClient({
+    apiKey: syncConfig.givebutter_api_key,
+    logger,
+  });
 
   // ============================================================================
-  // STEP 1: Load all mentors with contact_ids
+  // STEP 2: Fetch all contacts with tag from Givebutter
   // ============================================================================
-  console.log('📋 Step 1: Loading mentors with contact IDs...\n');
+  console.log('\n' + '='.repeat(80));
+  console.log('🔄 TAG-BASED CONTACT SYNC');
+  console.log('='.repeat(80) + '\n');
+  console.log(`🏷️  Tag filter: "${tagFilter}"\n`);
 
-  const { data: mentors, error: mentorsError } = await supabase
-    .from('mentors')
-    .select('*')
-    .not('gb_contact_id', 'is', null);
+  logger.info('Fetching contacts from Givebutter API');
 
-  if (mentorsError || !mentors) {
-    console.error('❌ Error loading mentors:', mentorsError);
+  let allContacts: any[] = [];
+  let page = 1;
+  let hasMore = true;
+
+  try {
+    // Fetch all pages of contacts with the tag
+    while (hasMore) {
+      // Use the client's list method with tag filter
+      // Note: GivebutterClient needs a listContacts method that accepts tag filter
+      // For now, using a simplified approach - this may need adjustment based on GB API
+      const response = await gbClient.request('GET', '/contacts', {
+        tags: tagFilter,
+        page,
+        per_page: 100, // Max per page
+      });
+
+      const contacts = response.data || [];
+      allContacts = allContacts.concat(contacts);
+
+      logger.info(`Fetched page ${page}: ${contacts.length} contacts`);
+
+      // Check if there are more pages
+      hasMore = contacts.length === 100; // If we got a full page, there might be more
+      page++;
+    }
+
+    logger.info(`Total contacts fetched: ${allContacts.length}`);
+    console.log(`✅ Fetched ${allContacts.length} contacts with tag "${tagFilter}"\n`);
+
+  } catch (error: any) {
+    logger.error('Failed to fetch contacts from Givebutter', error);
+    console.log(`❌ Error fetching contacts: ${error.message}\n`);
     process.exit(1);
   }
 
-  console.log(`   Found ${mentors.length} mentors with contact IDs\n`);
-
-  if (mentors.length === 0) {
-    console.log('   No mentors to sync. Upload a CSV first to capture contact IDs.\n');
+  if (allContacts.length === 0) {
+    logger.warn('No contacts found with this tag');
+    console.log(`⚠️  No contacts found with tag "${tagFilter}"\n`);
+    console.log('💡 Make sure contacts in Givebutter have the correct tag.');
     process.exit(0);
   }
 
   // ============================================================================
-  // STEP 2: Sync contacts via API with rate limiting
+  // STEP 3: Upsert to raw_gb_full_contacts
   // ============================================================================
-  console.log('🔄 Step 2: Syncing contacts from Givebutter API...\n');
+  console.log('💾 Upserting to raw_gb_full_contacts...\n');
+  logger.info('Upserting contacts to database');
 
-  let synced = 0;
-  let conflicts = 0;
+  let inserted = 0;
+  let updated = 0;
   let errors = 0;
-  let deleted = 0;
 
-  const conflictDetector = new ConflictDetector(supabase);
+  // Process in batches of 100 to avoid hitting database limits
+  const BATCH_SIZE = 100;
+  const totalBatches = Math.ceil(allContacts.length / BATCH_SIZE);
 
-  // Rate limiting: 10 requests per second (conservative)
-  const BATCH_SIZE = 10;
-  const DELAY_MS = 1000;
+  for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+    const startIndex = batchIndex * BATCH_SIZE;
+    const endIndex = Math.min(startIndex + BATCH_SIZE, allContacts.length);
+    const batch = allContacts.slice(startIndex, endIndex);
 
-  for (let i = 0; i < mentors.length; i += BATCH_SIZE) {
-    const batch = mentors.slice(i, i + BATCH_SIZE);
-
-    // Process batch in parallel
-    await Promise.all(batch.map(async (mentor: Mentor) => {
-      try {
-        // Fetch contact from Givebutter API
-        const response = await fetch(
-          `https://api.givebutter.com/v1/contacts/${mentor.gb_contact_id}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${GIVEBUTTER_API_KEY}`,
-              'Accept': 'application/json',
-            },
-          }
-        );
-
-        if (!response.ok) {
-          if (response.status === 404) {
-            // Contact deleted in Givebutter
-            console.log(`   ⚠️  Contact ${mentor.gb_contact_id} no longer exists (mentor ${mentor.mn_id})`);
-
-            await supabase.from('mn_errors').insert({
-              mn_id: mentor.mn_id,
-              error_type: 'contact_deleted',
-              severity: 'error',
-              error_message: `Contact ${mentor.gb_contact_id} no longer exists in Givebutter`,
-              source_table: 'raw_mn_gb_contacts',
-            });
-
-            // Update sync status to stale
-            await supabase
-              .from('raw_mn_gb_contacts')
-              .update({ sync_status: 'stale' })
-              .eq('contact_id', mentor.gb_contact_id!);
-
-            deleted++;
-            return;
-          }
-
-          throw new Error(`API error: ${response.status} ${response.statusText}`);
-        }
-
-        const gbContact: GivebutterContactResponse = await response.json();
-
-        // Upsert to raw_mn_gb_contacts
-        const { error: upsertError } = await supabase
-          .from('raw_mn_gb_contacts')
-          .upsert({
-            contact_id: gbContact.id,
-            mn_id: mentor.mn_id,
-            external_id: gbContact.external_id,
-            prefix: gbContact.prefix,
-            first_name: gbContact.first_name,
-            middle_name: gbContact.middle_name,
-            last_name: gbContact.last_name,
-            suffix: gbContact.suffix,
-            date_of_birth: gbContact.date_of_birth,
-            gender: gbContact.gender,
-            employer: gbContact.employer,
-            title: gbContact.title,
-            primary_email: gbContact.primary_email,
-            additional_emails: gbContact.additional_emails?.join(','),
-            primary_phone: gbContact.primary_phone,
-            additional_phones: gbContact.additional_phones?.join(','),
-            address_line_1: gbContact.address_line_1,
-            address_line_2: gbContact.address_line_2,
-            city: gbContact.city,
-            state: gbContact.state,
-            postal_code: gbContact.postal_code,
-            country: gbContact.country,
-            website: gbContact.website,
-            twitter: gbContact.twitter,
-            linkedin: gbContact.linkedin,
-            facebook: gbContact.facebook,
-            tags: gbContact.tags,
-            notes: gbContact.notes,
-            household_id: gbContact.household_id,
-            household: gbContact.household,
-            household_primary_contact: gbContact.household_primary_contact,
-            date_created_utc: gbContact.created_at,
-            last_modified_utc: gbContact.updated_at,
-            custom_fields: gbContact.custom_fields,
-            source: 'api_sync',
-            gb_updated_at: gbContact.updated_at,
-            last_synced_at: new Date().toISOString(),
-            sync_status: 'synced',
-          }, { onConflict: 'contact_id' });
-
-        if (upsertError) {
-          console.error(`   ❌ Error upserting contact for ${mentor.mn_id}:`, upsertError);
-          errors++;
-          return;
-        }
-
-        // Detect conflicts
-        const conflictResult = await conflictDetector.detectConflicts(mentor, gbContact);
-
-        if (conflictResult.hasConflicts) {
-          conflicts++;
-          await conflictDetector.logConflicts(mentor.mn_id, conflictResult.conflicts, gbContact);
-
-          // Update sync status
-          await supabase
-            .from('raw_mn_gb_contacts')
-            .update({ sync_status: 'conflict' })
-            .eq('contact_id', gbContact.id);
-        }
-
-        // Sync back allowed fields
-        if (Object.keys(conflictResult.syncBackUpdates).length > 0) {
-          await conflictDetector.applySyncBackUpdates(mentor.mn_id, conflictResult.syncBackUpdates);
-        }
-
-        synced++;
-
-      } catch (error) {
-        console.error(`   ❌ Error syncing contact for ${mentor.mn_id}:`, error instanceof Error ? error.message : error);
-        errors++;
-      }
+    // Transform contacts to match database schema
+    const rows = batch.map(contact => ({
+      contact_id: contact.id,
+      external_id: contact.external_id,
+      prefix: contact.prefix,
+      first_name: contact.first_name,
+      middle_name: contact.middle_name,
+      last_name: contact.last_name,
+      suffix: contact.suffix,
+      date_of_birth: contact.date_of_birth,
+      gender: contact.gender,
+      employer: contact.employer,
+      title: contact.title,
+      primary_email: contact.primary_email,
+      additional_emails: contact.additional_emails?.join(','),
+      primary_phone: contact.primary_phone,
+      additional_phones: contact.additional_phones?.join(','),
+      address_line_1: contact.address?.line1,
+      address_line_2: contact.address?.line2,
+      city: contact.city,
+      state: contact.state,
+      postal_code: contact.postal_code,
+      country: contact.country,
+      website: contact.website,
+      twitter: contact.twitter,
+      linkedin: contact.linkedin,
+      facebook: contact.facebook,
+      tags: contact.tags,
+      notes: contact.notes,
+      household_id: contact.household_id,
+      household: contact.household,
+      household_primary_contact: contact.household_primary_contact,
+      date_created_utc: contact.created_at,
+      last_modified_utc: contact.updated_at,
+      custom_fields: contact.custom_fields,
+      source: 'api_tag_sync',
     }));
 
-    // Progress
-    console.log(`   Synced ${Math.min(i + BATCH_SIZE, mentors.length)}/${mentors.length} contacts...`);
+    // Upsert batch
+    const { error: upsertError } = await supabase
+      .from('raw_gb_full_contacts')
+      .upsert(rows, { onConflict: 'contact_id' });
 
-    // Rate limit delay (except for last batch)
-    if (i + BATCH_SIZE < mentors.length) {
-      await sleep(DELAY_MS);
+    if (upsertError) {
+      logger.error(`Error upserting batch ${batchIndex + 1}`, upsertError);
+      errors += batch.length;
+    } else {
+      // Note: We can't easily determine inserted vs updated with upsert
+      // For now, count all as inserted
+      inserted += batch.length;
     }
+
+    logger.info(`Batch ${batchIndex + 1}/${totalBatches} complete`);
   }
+
+  // ============================================================================
+  // STEP 4: Update sync timestamp
+  // ============================================================================
+  await supabase
+    .from('sync_config')
+    .update({ last_sync_at: new Date().toISOString() })
+    .eq('id', 1);
 
   // ============================================================================
   // SUMMARY
   // ============================================================================
   console.log('\n' + '='.repeat(80));
-  console.log('✅ CONTACT SYNC COMPLETE');
+  console.log('✅ TAG-BASED SYNC COMPLETE');
   console.log('='.repeat(80));
   console.log('📊 Results:');
-  console.log(`   Total mentors: ${mentors.length}`);
-  console.log(`   Synced successfully: ${synced}`);
-  console.log(`   Conflicts detected: ${conflicts}`);
-  console.log(`   Deleted in GB: ${deleted}`);
+  console.log(`   Contacts fetched: ${allContacts.length}`);
+  console.log(`   Successfully upserted: ${inserted}`);
   console.log(`   Errors: ${errors}\n`);
 
-  if (conflicts > 0) {
-    console.log('⚠️  Conflicts Found:');
-    console.log('   Review mn_errors table for details');
-    console.log('   Consider resolving conflicts before next export\n');
+  if (errors > 0) {
+    logger.warn('Some contacts failed to sync');
+    console.log('⚠️  Some contacts failed to sync. Check logs for details.\n');
   }
 
-  if (deleted > 0) {
-    console.log('⚠️  Deleted Contacts:');
-    console.log('   Some contacts no longer exist in Givebutter');
-    console.log('   Review mn_errors and consider re-creating via export\n');
-  }
+  console.log('💡 Next Steps:');
+  console.log('   1. Contacts are now in raw_gb_full_contacts');
+  console.log('   2. Run ETL to match contacts to mentors');
+  console.log('   3. Contact IDs will be automatically linked during ETL\n');
+
+  logger.info('Tag-based contact sync complete');
 }
 
-syncGivebutterContactsAPI();
+syncGivebutterContactsByTag();

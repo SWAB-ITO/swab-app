@@ -1,25 +1,28 @@
 /**
- * THREE-TIER SYNC ORCHESTRATOR
+ * SYNC ORCHESTRATOR
  *
- * Implements the three-tier sync architecture from SYNC_ARCHITECTURE.md
+ * Coordinates syncing data from external sources (Jotform, Givebutter)
+ * into the simplified database schema.
  *
- * Tier 1: Initialization (one-time setup)
- * Tier 2: Periodic Sync (automated, no CSV)
- * Tier 3: Feature Operations (manual, CSV-dependent)
+ * Flow:
+ * 1. Fetch Jotform signups → raw_mn_signups
+ * 2. Fetch Jotform setup → raw_mn_funds_setup
+ * 3. Fetch GB campaign members → raw_gb_campaign_members
+ * 4. Run ETL → mentors (single source of truth)
+ * 5. Sync GB contacts via API (tag-based: "Mentors 2025")
  *
  * Usage:
- *   npm run sync:init              (Tier 1 - initialization)
- *   npm run sync                   (Tier 2 - periodic sync)
- *   npm run sync:upload-csv <path> (Tier 3 - CSV upload)
+ *   npm run sync                   (periodic sync)
  */
 
-import dotenv from 'dotenv';
+import { config as dotenvConfig } from 'dotenv';
 import { resolve } from 'path';
 import { createClient } from '@supabase/supabase-js';
 import { getSupabaseConfig } from '../config/supabase';
-import { execSync } from 'child_process';
+import { spawn } from 'child_process';
+import { Database } from '../../lib/supabase/database.types';
 
-dotenv.config({ path: resolve(process.cwd(), '.env.local') });
+dotenvConfig({ path: resolve(process.cwd(), '.env.local') });
 
 export type SyncType = 'initialization' | 'automated' | 'manual' | 'feature_csv_upload';
 export type SyncStatus = 'running' | 'completed' | 'failed';
@@ -41,7 +44,7 @@ export interface SyncLogEntry {
 }
 
 export class SyncOrchestrator {
-  private supabase: ReturnType<typeof createClient>;
+  private supabase: ReturnType<typeof createClient<Database>>;
   private syncLogId?: string;
 
   constructor() {
@@ -108,38 +111,74 @@ export class SyncOrchestrator {
   }
 
   /**
-   * Run a script and capture output
+   * Run a script asynchronously with real-time output streaming
    */
-  runScript(command: string): { success: boolean; output?: string; error?: string } {
-    try {
-      const output = execSync(command, {
-        stdio: 'pipe',
+  async runScript(command: string): Promise<{ success: boolean; output?: string; error?: string }> {
+    return new Promise((resolve) => {
+      // Parse command (e.g., "npm run sync:jotform-signups")
+      const [cmd, ...args] = command.split(' ');
+
+      // Spawn the process
+      const child = spawn(cmd, args, {
         cwd: process.cwd(),
-        encoding: 'utf-8',
+        stdio: ['inherit', 'pipe', 'pipe'], // inherit stdin, pipe stdout/stderr
+        shell: true,
       });
-      return { success: true, output };
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.message,
-        output: error.stdout || error.stderr,
-      };
-    }
+
+      let stdout = '';
+      let stderr = '';
+
+      // Capture and stream stdout
+      child.stdout?.on('data', (data) => {
+        const text = data.toString();
+        stdout += text;
+        process.stdout.write(text); // Stream to console in real-time
+      });
+
+      // Capture and stream stderr
+      child.stderr?.on('data', (data) => {
+        const text = data.toString();
+        stderr += text;
+        process.stderr.write(text); // Stream to console in real-time
+      });
+
+      // Handle process completion
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve({ success: true, output: stdout });
+        } else {
+          resolve({
+            success: false,
+            error: `Process exited with code ${code}`,
+            output: stderr || stdout,
+          });
+        }
+      });
+
+      // Handle process errors
+      child.on('error', (error) => {
+        resolve({
+          success: false,
+          error: error.message,
+          output: stderr,
+        });
+      });
+    });
   }
 
   /**
-   * Tier 2: Periodic Sync (No CSV required)
+   * Periodic Sync (No CSV required)
    *
    * Flow:
    * 1. Fetch Jotform signups → raw tables
    * 2. Fetch Jotform setup → raw tables
    * 3. Fetch Givebutter members → raw tables
-   * 4. Run ETL → mentors, mn_tasks, mn_errors, mn_gb_import
-   * 5. Sync Givebutter contacts via API (only those with contact_ids)
+   * 4. Run ETL → mentors, mn_errors, mn_gb_import
+   * 5. Sync Givebutter contacts via API (tag-based: "Mentors 2025")
    */
   async runPeriodicSync(triggeredBy: string = 'manual'): Promise<void> {
     console.log('\n' + '='.repeat(80));
-    console.log('🔄 TIER 2: PERIODIC SYNC (Automated Baseline)');
+    console.log('🔄 PERIODIC SYNC');
     console.log('='.repeat(80) + '\n');
 
     const logId = await this.startSyncLog('automated', triggeredBy);
@@ -165,7 +204,7 @@ export class SyncOrchestrator {
       console.log(`\n▶️  ${step.name}...`);
       console.log('─'.repeat(80) + '\n');
 
-      const result = this.runScript(step.command);
+      const result = await this.runScript(step.command);
 
       if (!result.success) {
         failed = true;

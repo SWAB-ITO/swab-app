@@ -25,6 +25,10 @@ const SYNC_STEPS = [
     name: 'ETL Process',
     script: 'backend/core/etl/process.ts',
   },
+  {
+    name: 'API Contact Sync',
+    script: 'backend/core/sync/api-contacts.ts',
+  },
 ];
 
 export async function POST(request: NextRequest) {

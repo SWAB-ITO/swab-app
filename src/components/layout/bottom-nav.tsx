@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Users, MessageSquare, Database } from "lucide-react";
+import { Home, Users, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -17,11 +17,6 @@ const navItems = [
     icon: Users,
   },
   {
-    title: "Comms",
-    href: "/communications",
-    icon: MessageSquare,
-  },
-  {
     title: "Sync",
     href: "/sync",
     icon: Database,
@@ -32,7 +27,7 @@ export function BottomNav() {
   const pathname = usePathname();
 
   return (
-    <nav className="fixed bottom-6 left-0 right-0 px-4 pt-6 pb-3 pointer-events-none">
+    <nav className="fixed bottom-4 left-0 right-0 px-4 pt-6 pb-3 pointer-events-none">
       <div className="flex items-center justify-center pointer-events-auto">
         <div className="flex items-center gap-1 bg-gray-100 rounded-full p-1 shadow-lg border border-gray-200">
           {navItems.map((item) => {

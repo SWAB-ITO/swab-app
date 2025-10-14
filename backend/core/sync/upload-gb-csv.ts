@@ -8,24 +8,29 @@
  * 2. Store in raw_gb_full_contacts table
  * 3. Match contacts to mentors (phone → email → external_id)
  * 4. Update mentors.gb_contact_id
- * 5. Store mentor contacts in raw_mn_gb_contacts
- * 6. Detect and log duplicates
- * 7. Log to csv_import_log
+ * 5. Detect and log duplicates
+ * 6. Log to csv_import_log
  *
  * Usage: npm run sync:upload-csv /path/to/givebutter-export.csv
  */
 
-import dotenv from 'dotenv';
+import { config as dotenvConfig } from 'dotenv';
 import { resolve } from 'path';
 import { createClient } from '@supabase/supabase-js';
 import { getSupabaseConfig } from '../config/supabase';
-import { parseGivebutterCSV } from '../../lib/services/csv-parser';
-import { ContactMatcher } from '../../lib/services/contact-matching';
+import { parseGivebutterCSV } from '../services/csv-parser';
+import { ContactMatcher } from '../services/contact-matching';
+import { BatchUpserter } from '../../lib/infrastructure/operators/batch-upserter';
+import { Logger } from '../../lib/utils/logger';
+import { ErrorHandler } from '../../lib/utils/error-handler';
 import { stat } from 'fs/promises';
 
-dotenv.config({ path: resolve(process.cwd(), '.env.local') });
+dotenvConfig({ path: resolve(process.cwd(), '.env.local') });
 
 async function uploadGivebutterCSV() {
+  const logger = new Logger('CsvUpload');
+  logger.start('Givebutter CSV Upload');
+
   console.log('\n' + '='.repeat(80));
   console.log('📤 GIVEBUTTER CSV UPLOAD → DATABASE (FULL SYNC)');
   console.log('='.repeat(80) + '\n');
@@ -33,27 +38,29 @@ async function uploadGivebutterCSV() {
   // Get CSV path from command line args
   const csvPath = process.argv[2];
   if (!csvPath) {
-    console.error('❌ Error: CSV path required');
+    logger.error('CSV path required');
     console.log('\nUsage: npm run sync:upload-csv /path/to/givebutter-export.csv\n');
     process.exit(1);
   }
 
   const resolvedPath = resolve(csvPath);
-  console.log(`📁 CSV Path: ${resolvedPath}\n`);
+  logger.info(`CSV Path: ${resolvedPath}`);
 
   // Check if file exists and get file size
   let fileSize = 0;
   try {
     const stats = await stat(resolvedPath);
     fileSize = stats.size;
-    console.log(`   File size: ${(fileSize / 1024 / 1024).toFixed(2)} MB\n`);
+    logger.info(`File size: ${(fileSize / 1024 / 1024).toFixed(2)} MB`);
   } catch (error) {
-    console.error(`❌ Error: File not found: ${resolvedPath}\n`);
+    logger.error('File not found', { path: resolvedPath });
     process.exit(1);
   }
 
   const config = getSupabaseConfig();
   const supabase = createClient(config.url, config.serviceRoleKey || config.anonKey);
+  const errorHandler = new ErrorHandler({ supabase, logger });
+  const batchUpserter = new BatchUpserter({ supabase, logger, errorHandler });
 
   const startTime = Date.now();
 
@@ -71,7 +78,7 @@ async function uploadGivebutterCSV() {
   // ============================================================================
   // STEP 2: Clear and repopulate raw_gb_full_contacts
   // ============================================================================
-  console.log('💾 Step 2: Storing contacts in database...\n');
+  logger.info('Storing contacts in database');
 
   // Delete existing contacts
   const { error: deleteError } = await supabase
@@ -80,39 +87,22 @@ async function uploadGivebutterCSV() {
     .gte('contact_id', 0);
 
   if (deleteError) {
-    console.error('❌ Error clearing raw_gb_full_contacts:', deleteError);
+    logger.error('Error clearing raw_gb_full_contacts', deleteError);
     process.exit(1);
   }
 
-  console.log('   ✅ Cleared existing contacts\n');
+  logger.info('Cleared existing contacts');
 
-  // Insert in batches
-  const BATCH_SIZE = 100;
-  let inserted = 0;
-  let failed = 0;
+  // Insert using BatchUpserter
+  const enrichedContacts = contacts.map(c => ({
+    ...c,
+    csv_uploaded_at: new Date().toISOString(),
+    csv_filename: csvPath.split('/').pop(),
+  }));
 
-  for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
-    const batch = contacts.slice(i, i + BATCH_SIZE);
-
-    const { error: insertError } = await supabase
-      .from('raw_gb_full_contacts')
-      .insert(batch.map(c => ({
-        ...c,
-        csv_uploaded_at: new Date().toISOString(),
-        csv_filename: csvPath.split('/').pop(),
-      })));
-
-    if (insertError) {
-      console.error(`   ❌ Batch ${Math.floor(i / BATCH_SIZE) + 1} error:`, insertError.message);
-      failed += batch.length;
-    } else {
-      inserted += batch.length;
-    }
-
-    if (inserted % 500 === 0 && inserted > 0) {
-      console.log(`   Inserted ${inserted.toLocaleString()}/${contacts.length.toLocaleString()} contacts...`);
-    }
-  }
+  const insertResult = await batchUpserter.insert('raw_gb_full_contacts', enrichedContacts);
+  const inserted = insertResult.successful.length;
+  const failed = insertResult.failed.length;
 
   console.log(`\n   ✅ Inserted ${inserted.toLocaleString()} contacts`);
   if (failed > 0) {

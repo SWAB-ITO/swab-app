@@ -8,7 +8,7 @@
       "name": "📝 Sign Up Complete",
       "type": "yes_no",
       "description": "Has the mentor completed their initial signup form?",
-      "source": "mn_tasks.signup_done",
+      "source": "mentors.signup_at",
       "mapping": {
         "true": "Yes",
         "false": "No"
@@ -19,7 +19,7 @@
       "name": "💸 Givebutter Page Setup",
       "type": "yes_no",
       "description": "Has the mentor completed the setup form?",
-      "source": "mn_tasks.setup_done",
+      "source": "mentors.setup_submission_id",
       "mapping": {
         "true": "Yes",
         "false": "No"
@@ -44,7 +44,7 @@
       "name": "🚂 Mentor Training Complete",
       "type": "yes_no",
       "description": "Has the mentor completed training?",
-      "source": "mn_tasks.training_done",
+      "source": "mentors.training_done",
       "mapping": {
         "true": "Yes",
         "false": "No"
@@ -55,7 +55,7 @@
       "name": "📈 Fully Fundraised?",
       "type": "yes_no",
       "description": "Has the mentor raised at least $75?",
-      "source": "mn_tasks.fundraised_done",
+      "source": "mentors.fundraised_done",
       "mapping": {
         "true": "Yes",
         "false": "No"

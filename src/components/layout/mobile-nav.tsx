@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Users, MessageSquare, Database } from "lucide-react";
+import { Home, Users, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const mobileNavItems = [
@@ -15,11 +15,6 @@ const mobileNavItems = [
     title: "Mentors",
     href: "/mentors",
     icon: Users,
-  },
-  {
-    title: "Comms",
-    href: "/communications",
-    icon: MessageSquare,
   },
   {
     title: "Sync",

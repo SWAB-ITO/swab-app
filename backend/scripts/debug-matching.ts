@@ -3,7 +3,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import { getSupabaseConfig } from '../core/config/supabase';
-import { normalizePhone, normalizeEmail } from '../lib/services/contact-matching';
+import { normalizePhone, normalizeEmail } from '../core/services/contact-matching';
 import dotenv from 'dotenv';
 import { resolve } from 'path';
 

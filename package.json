@@ -25,12 +25,12 @@
     "sync:api-contacts": "tsx backend/core/sync/api-contacts.ts",
     "sync:init": "tsx backend/core/sync/initialize.ts",
     "etl": "tsx backend/core/etl/process.ts",
-    "admin:check-env": "tsx backend/lib/utilities/check-env.ts",
-    "admin:verify": "tsx backend/lib/utilities/verify-data.ts",
-    "admin:gb:consolidate-duplicates": "tsx backend/lib/operations/givebutter/consolidate-duplicates.ts",
-    "text:preview": "tsx backend/features/text-messages/message-engine.ts",
-    "text:export": "tsx backend/features/text-messages/export-contacts.ts",
-    "text:validate": "tsx backend/features/text-messages/validate-export.ts"
+    "admin:check-env": "tsx backend/scripts/check-env.ts",
+    "admin:gb:consolidate-duplicates": "tsx backend/scripts/consolidate-duplicates.ts",
+    "comms:query": "tsx backend/features/comms/tools/query.ts",
+    "comms:export": "tsx backend/features/comms/tools/export.ts",
+    "comms:validate": "tsx backend/features/comms/tools/validate.ts",
+    "comms:test": "tsx backend/features/comms/tools/test.ts"
   },
   "dependencies": {
     "@radix-ui/react-dropdown-menu": "^2.1.16",
@@ -44,7 +44,8 @@
     "next": "^15.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^3.3.1"
+    "tailwind-merge": "^3.3.1",
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
     "@types/node": "^22",
