@@ -43,7 +43,7 @@ async function archiveDuplicates() {
     process.exit(1);
   }
 
-  const logger = new Logger({ level: 'info' });
+  const logger = new Logger('ArchiveDuplicates', { level: 'info' });
   const client = new GivebutterClient({ apiKey, logger });
 
   console.log(`📋 Contacts to archive: ${CONTACTS_TO_ARCHIVE.length}\n`);

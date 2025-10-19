@@ -123,6 +123,17 @@ async function syncContacts() {
       continue;
     }
 
+    // **CRITICAL FILTER: Reject junk/auto-generated duplicate contacts**
+    // These have pattern "F.25.XXXXX" / "L.25.XXXXX" and no phone number
+    const firstName = row['First Name'] || '';
+    const lastName = row['Last Name'] || '';
+    const isJunkContact = /^F\.\d+\.\d+$/.test(firstName) && /^L\.\d+\.\d+$/.test(lastName);
+
+    if (isJunkContact) {
+      filtered++;
+      continue; // SKIP this junk duplicate - don't even save it to database
+    }
+
     // Extract custom fields
     const customFields: Record<string, any> = {};
     const customFieldNames = [

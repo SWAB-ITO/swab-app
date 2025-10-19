@@ -77,10 +77,10 @@ function parseSubmission(submission: JotformSubmission) {
     submission_id: submission.id,
 
     // Name fields
-    prefix: fullName.prefix || null,
     first_name: fullName.first || null,
     middle_name: fullName.middle || null,
     last_name: fullName.last || null,
+    preferred_name: fullName.prefix || null,  // Prefix field is labeled "Preferred Name" in Jotform
 
     // Contact
     uga_email: getAnswerByName('ugaEmail'),
@@ -92,9 +92,8 @@ function parseSubmission(submission: JotformSubmission) {
     uga_class: getAnswerByName('ugaClass'),
     shirt_size: getAnswerByName('shirtSize'),
     gender: getAnswerByName('gender'),
-
-    // Store complete submission
-    raw_data: answers,
+    shift_preference: getAnswerByName('shiftPreference'),
+    partner_preference: getAnswerByName('partnerPreference'),
 
     // Metadata
     submitted_at: new Date(submission.created_at).toISOString(),
@@ -125,7 +124,6 @@ async function syncSignups() {
     console.log(`✅ Found ${submissions.length} submissions\n`);
 
     let inserted = 0;
-    let updated = 0;
     let errors = 0;
 
     console.log('📝 Processing submissions...\n');

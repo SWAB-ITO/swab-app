@@ -7,7 +7,7 @@
  * 3. Deduplicate signups by phone (keep most recent)
  * 4. Normalize phones to E.164: +1XXXXXXXXXX
  * 5. Match across sources (determine gb_contact_id)
- * 6. Compute status and generate status_text
+ * 6. Compute status_category
  * 7. Detect conflicts → log to mn_errors
  * 8. UPSERT to mentors (single source of truth)
  *
@@ -96,18 +96,19 @@ function getMentorTags(statusCategory: string): string {
 interface RawSignup {
   submission_id: string;
   mn_id?: string;  // From Jotform (MUST exist)
-  prefix?: string;
   first_name: string;
   middle_name?: string;
   last_name: string;
+  preferred_name?: string;
   uga_email: string;
   personal_email?: string;
   phone: string;
   uga_class?: string;
   shirt_size?: string;
   gender?: string;
+  shift_preference?: string;
+  partner_preference?: string;
   submitted_at?: string;
-  raw_data: any;
 }
 
 interface RawSetup {
@@ -130,6 +131,7 @@ interface RawContact {
   last_name?: string;
   primary_email?: string;
   primary_phone?: string;
+  external_id?: string;
   tags?: string[];
 }
 
@@ -159,7 +161,6 @@ interface Mentor {
   training_done?: boolean;
   training_at?: string;
   status_category: string;
-  status_text: string;
   signup_submission_id: string;
   setup_submission_id?: string;
   signup_at?: string;
@@ -194,25 +195,11 @@ interface MentorError {
 // Note: normalizePhone and normalizeEmail are imported from lib/utils/validators.ts
 
 function buildFullName(signup: RawSignup): string {
-  const displayName = signup.prefix?.trim() || signup.first_name;
+  const displayName = signup.preferred_name?.trim() || signup.first_name;
   const middlePart = signup.middle_name ? ` ${signup.middle_name}` : '';
   return `${displayName}${middlePart} ${signup.last_name}`.trim();
 }
 
-function getStatusText(statusCategory: string): string {
-  switch (statusCategory) {
-    case 'complete':
-      return 'You are all set! Look out for more information closer to the event.';
-    case 'needs_fundraising':
-      return 'Work on fundraising your $75. Once you hit $75, you\'re all set!';
-    case 'needs_page':
-      return 'Use the link from your "Next Steps" email to create your Givebutter fundraising page.';
-    case 'needs_setup':
-      return 'Look for the "Next Steps" email from SWAB and complete the Givebutter setup form.';
-    default:
-      return 'Please contact SWAB for next steps.';
-  }
-}
 
 /**
  * HELPER: Load all contacts with pagination
@@ -511,17 +498,20 @@ function processMentorSignup(
   const firstName = signup.first_name || 'Unknown';
   const middleName = signup.middle_name || undefined;
   const lastName = signup.last_name || 'Unknown';
-  const preferredName = signup.prefix?.trim() || firstName;
+  const preferredName = signup.preferred_name?.trim() || firstName;
   const fullName = buildFullName(signup);
 
   // Match to Givebutter contact (Priority: phone → email)
   let gbContactId: number | undefined;
   let gbMemberId: number | undefined;
+  let hasDroppedTag = false;
 
   // Try phone match
   const contactByPhone = context.phoneToContact.get(normPhone);
   if (contactByPhone) {
     gbContactId = contactByPhone.contact_id;
+    // Check for "Dropped 25" tag
+    hasDroppedTag = contactByPhone.tags?.includes('Dropped 25') || false;
   } else {
     // Try email match
     const normPersonalEmail = normalizeEmail(signup.personal_email);
@@ -536,17 +526,55 @@ function processMentorSignup(
     }
 
     if (contactsByEmail.length > 0) {
-      contactsByEmail.sort((a, b) => b.contact_id - a.contact_id);
+      // Smart matching when there are multiple contacts
+      // Priority:
+      // 1. Contact with matching External ID
+      // 2. Contact with phone number (junk duplicates have null phones)
+      // 3. Contact with real name (not auto-generated "F.XXXXX L.XXXXX")
+      // 4. Newest contact (highest ID)
+
+      const isJunkContact = (c: RawContact) => {
+        const firstName = c.first_name || '';
+        const lastName = c.last_name || '';
+        // Check for auto-generated pattern: "F.25.XXXXX L.25.XXXXX"
+        return /^F\.\d+\.\d+$/.test(firstName) && /^L\.\d+\.\d+$/.test(lastName);
+      };
+
+      contactsByEmail.sort((a, b) => {
+        // 1. Prefer contact with matching external_id
+        const aHasMatchingExternalId = a.external_id === signup.mn_id;
+        const bHasMatchingExternalId = b.external_id === signup.mn_id;
+        if (aHasMatchingExternalId && !bHasMatchingExternalId) return -1;
+        if (!aHasMatchingExternalId && bHasMatchingExternalId) return 1;
+
+        // 2. Prefer contact with phone number
+        const aHasPhone = !!a.primary_phone;
+        const bHasPhone = !!b.primary_phone;
+        if (aHasPhone && !bHasPhone) return -1;
+        if (!aHasPhone && bHasPhone) return 1;
+
+        // 3. Avoid junk/auto-generated contacts
+        const aIsJunk = isJunkContact(a);
+        const bIsJunk = isJunkContact(b);
+        if (!aIsJunk && bIsJunk) return -1;
+        if (aIsJunk && !bIsJunk) return 1;
+
+        // 4. Prefer newer contact (higher ID)
+        return b.contact_id - a.contact_id;
+      });
+
       gbContactId = contactsByEmail[0].contact_id;
+      // Check for "Dropped 25" tag
+      hasDroppedTag = contactsByEmail[0].tags?.includes('Dropped 25') || false;
 
       if (contactsByEmail.length > 1) {
         errors.push({
           mn_id: signup.mn_id,
           error_type: 'multiple_contacts',
-          error_message: `Found ${contactsByEmail.length} Givebutter contacts for this email`,
+          error_message: `Found ${contactsByEmail.length} Givebutter contacts for this email (selected ${gbContactId})`,
           severity: 'warning',
           source_table: 'raw_gb_full_contacts',
-          raw_data: { contacts: contactsByEmail.map(c => c.contact_id) },
+          raw_data: { contacts: contactsByEmail.map(c => ({ id: c.contact_id, external_id: c.external_id, has_phone: !!c.primary_phone })) },
         });
       }
     }
@@ -573,19 +601,33 @@ function processMentorSignup(
     gbMemberId = memberMatch.member_id;
   }
 
+  // Skip mentors with "Dropped 25" tag
+  if (hasDroppedTag) {
+    errors.push({
+      mn_id: signup.mn_id,
+      error_type: 'dropped_mentor',
+      error_message: 'Mentor has "Dropped 25" tag in Givebutter - excluding from processing',
+      severity: 'info',
+      source_table: 'raw_gb_full_contacts',
+      phone: normPhone,
+      email: signup.uga_email || signup.personal_email,
+      raw_data: { gb_contact_id: gbContactId },
+    });
+    return null;
+  }
+
   // Calculate fundraising data (merged into mentor record)
   const amountRaised = memberMatch?.amount_raised || 0;
   const fundraisedDone = amountRaised >= 75;
   const campaignMember = !!memberMatch;
 
   // Compute status
+  // Note: training_done is not tracked yet, so we only check if fundraised
   const statusCategory =
-    fundraisedDone && false ? 'complete' :  // training_done not tracked yet
+    fundraisedDone ? 'complete' :
     campaignMember && !fundraisedDone ? 'needs_fundraising' :
     !!setupMatch && !campaignMember ? 'needs_page' :
     'needs_setup';
-
-  const statusText = getStatusText(statusCategory);
 
   // Preserve existing IDs if no new match found
   const preservedContactId = context.existingContactIds.get(signup.mn_id!);
@@ -618,7 +660,6 @@ function processMentorSignup(
     training_done: false,
     training_at: undefined,
     status_category: statusCategory,
-    status_text: statusText,
     signup_submission_id: signup.submission_id,
     setup_submission_id: setupMatch?.submission_id,
     signup_at: signup.submitted_at,

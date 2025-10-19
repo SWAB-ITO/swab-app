@@ -19,6 +19,7 @@
 --   ADMIN:
 --     - mn_errors (error tracking)
 --     - sync_log (sync history)
+--     - csv_import_log (CSV upload tracking)
 -- ============================================================================
 
 -- ============================================================================
@@ -66,6 +67,7 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 
 CREATE TABLE raw_mn_signups (
   submission_id TEXT PRIMARY KEY,
+  mn_id TEXT,
 
   -- Personal Info
   first_name TEXT,
@@ -91,6 +93,7 @@ CREATE TABLE raw_mn_signups (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE INDEX idx_raw_mn_signups_mn_id ON raw_mn_signups(mn_id);
 CREATE INDEX idx_raw_mn_signups_uga_email ON raw_mn_signups(uga_email);
 CREATE INDEX idx_raw_mn_signups_personal_email ON raw_mn_signups(personal_email);
 CREATE INDEX idx_raw_mn_signups_phone ON raw_mn_signups(phone);
@@ -286,7 +289,6 @@ CREATE TABLE mentors (
 
   -- Status
   status_category TEXT,
-  status_text TEXT,
 
   -- Form Submissions
   signup_submission_id TEXT,
@@ -373,11 +375,20 @@ CREATE TABLE mn_errors (
   error_type TEXT NOT NULL,
   error_message TEXT,
   field_name TEXT,
+  severity TEXT CHECK (severity IN ('critical', 'error', 'warning', 'info')),
+
+  -- Contact Info (for easier lookup)
+  phone TEXT,
+  email TEXT,
 
   -- Conflict Data (for conflict errors)
   local_value TEXT,
   remote_value TEXT,
   chosen_value TEXT,
+
+  -- Source
+  source_table TEXT,
+  raw_data JSONB,
 
   -- Resolution
   resolved BOOLEAN DEFAULT FALSE,
@@ -390,6 +401,10 @@ CREATE TABLE mn_errors (
 CREATE INDEX idx_mn_errors_mn_id ON mn_errors(mn_id);
 CREATE INDEX idx_mn_errors_error_type ON mn_errors(error_type);
 CREATE INDEX idx_mn_errors_resolved ON mn_errors(resolved);
+CREATE INDEX idx_mn_errors_phone ON mn_errors(phone);
+CREATE INDEX idx_mn_errors_email ON mn_errors(email);
+CREATE INDEX idx_mn_errors_severity ON mn_errors(severity);
+CREATE INDEX idx_mn_errors_source_table ON mn_errors(source_table);
 CREATE TRIGGER mn_errors_updated_at BEFORE UPDATE ON mn_errors
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
@@ -403,20 +418,22 @@ CREATE TABLE sync_log (
   -- Sync Details
   sync_type TEXT NOT NULL,
   source TEXT,
-  status TEXT CHECK (status IN ('success', 'partial', 'failed')),
+  status TEXT CHECK (status IN ('running', 'completed', 'failed')),
+  triggered_by TEXT,
 
   -- Statistics
   records_processed INTEGER DEFAULT 0,
-  records_created INTEGER DEFAULT 0,
+  records_inserted INTEGER DEFAULT 0,
   records_updated INTEGER DEFAULT 0,
   records_failed INTEGER DEFAULT 0,
 
   -- Error Tracking
   error_message TEXT,
+  error_details JSONB,
 
   -- Metadata
   metadata JSONB,
-  duration_ms INTEGER,
+  duration_seconds INTEGER,
 
   -- Timestamps
   started_at TIMESTAMPTZ DEFAULT NOW(),
@@ -427,6 +444,159 @@ CREATE TABLE sync_log (
 CREATE INDEX idx_sync_log_sync_type ON sync_log(sync_type);
 CREATE INDEX idx_sync_log_status ON sync_log(status);
 CREATE INDEX idx_sync_log_started_at ON sync_log(started_at DESC);
+
+-- ============================================================================
+-- ADMIN: sync_config (system configuration)
+-- ============================================================================
+
+CREATE TABLE sync_config (
+  id SERIAL PRIMARY KEY,
+
+  -- API Keys
+  jotform_api_key TEXT,
+  givebutter_api_key TEXT,
+  jotform_signup_form_id TEXT,
+  jotform_setup_form_id TEXT,
+  givebutter_campaign_code TEXT,
+
+  -- Sync tracking
+  last_sync_at TIMESTAMPTZ,
+  last_csv_upload_at TIMESTAMPTZ,
+  last_jotform_sync_at TIMESTAMPTZ,
+  last_gb_api_sync_at TIMESTAMPTZ,
+  last_tag_query_at TIMESTAMPTZ,
+
+  -- Configuration
+  system_initialized BOOLEAN DEFAULT FALSE,
+  configured_at TIMESTAMPTZ,
+  configured_by TEXT,
+  contact_sync_interval_hours INTEGER DEFAULT 24,
+
+  -- Campaign info
+  current_campaign_code TEXT DEFAULT 'SWABUGA2025',
+  current_tag_filter TEXT DEFAULT 'Mentors 2025',
+
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Insert default config row
+INSERT INTO sync_config (id, system_initialized) VALUES (1, FALSE);
+
+-- Trigger for updated_at
+CREATE TRIGGER sync_config_updated_at BEFORE UPDATE ON sync_config
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- ADMIN: csv_import_log (CSV upload tracking)
+-- ============================================================================
+
+CREATE TABLE csv_import_log (
+  id SERIAL PRIMARY KEY,
+
+  -- File Info
+  filename TEXT NOT NULL,
+  file_size_bytes BIGINT,
+
+  -- Import Statistics
+  total_contacts INTEGER DEFAULT 0,
+  mentors_matched INTEGER DEFAULT 0,
+  new_contact_ids_captured INTEGER DEFAULT 0,
+  duplicates_detected INTEGER DEFAULT 0,
+
+  -- Performance
+  processing_time_ms INTEGER,
+
+  -- Metadata
+  uploaded_by TEXT,
+  uploaded_at TIMESTAMPTZ DEFAULT NOW(),
+
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_csv_import_log_uploaded_at ON csv_import_log(uploaded_at DESC);
+CREATE INDEX idx_csv_import_log_filename ON csv_import_log(filename);
+
+-- ============================================================================
+-- FUNCTION: get_sync_stats (aggregate sync statistics)
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION get_sync_stats()
+RETURNS TABLE (
+  sync_type TEXT,
+  last_sync TIMESTAMPTZ,
+  total_syncs BIGINT,
+  failed_syncs BIGINT,
+  avg_duration_seconds NUMERIC
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    sl.sync_type::TEXT,
+    MAX(sl.started_at) as last_sync,
+    COUNT(*)::BIGINT as total_syncs,
+    COUNT(*) FILTER (WHERE sl.status = 'failed')::BIGINT as failed_syncs,
+    AVG(sl.duration_seconds)::NUMERIC as avg_duration_seconds
+  FROM sync_log sl
+  GROUP BY sl.sync_type
+  ORDER BY last_sync DESC;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================================
+-- FUNCTION: link_campaign_members_to_mentors
+-- ============================================================================
+-- Links campaign members to mentors by matching email/phone
+-- Updates raw_gb_campaign_members.mn_id when a match is found
+
+CREATE OR REPLACE FUNCTION link_campaign_members_to_mentors()
+RETURNS INTEGER AS $$
+DECLARE
+  email_count INTEGER;
+  phone_count INTEGER;
+BEGIN
+  -- Update campaign members by matching email with mentors
+  WITH email_matches AS (
+    SELECT
+      cm.member_id,
+      m.mn_id
+    FROM raw_gb_campaign_members cm
+    INNER JOIN mentors m
+      ON LOWER(cm.email) = LOWER(m.personal_email)
+      OR LOWER(cm.email) = LOWER(m.uga_email)
+    WHERE cm.mn_id IS NULL
+  )
+  UPDATE raw_gb_campaign_members cm
+  SET mn_id = em.mn_id
+  FROM email_matches em
+  WHERE cm.member_id = em.member_id;
+
+  GET DIAGNOSTICS email_count = ROW_COUNT;
+
+  -- Also try to match by phone for any remaining unmatched
+  WITH phone_matches AS (
+    SELECT
+      cm.member_id,
+      m.mn_id
+    FROM raw_gb_campaign_members cm
+    INNER JOIN mentors m
+      ON cm.phone = m.phone
+    WHERE cm.mn_id IS NULL
+      AND cm.phone IS NOT NULL
+      AND m.phone IS NOT NULL
+  )
+  UPDATE raw_gb_campaign_members cm
+  SET mn_id = pm.mn_id
+  FROM phone_matches pm
+  WHERE cm.member_id = pm.member_id;
+
+  GET DIAGNOSTICS phone_count = ROW_COUNT;
+
+  RETURN email_count + phone_count;
+END;
+$$ LANGUAGE plpgsql;
 
 -- ============================================================================
 -- NOTES
@@ -446,6 +616,11 @@ CREATE INDEX idx_sync_log_started_at ON sync_log(started_at DESC);
 --
 -- Export:
 --   - mn_gb_import (staging table generated on-demand based on current mentors + feature needs)
+--
+-- Admin:
+--   - sync_config (API keys and configuration)
+--   - sync_log (sync history)
+--   - mn_errors (error tracking)
 --
 -- Sync workflow:
 --   1. Jotform sync → raw_mn_signups (initial signup + BGC)

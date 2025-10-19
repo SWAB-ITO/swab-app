@@ -372,11 +372,11 @@ export default function SyncDashboard() {
             <h3 className="text-lg font-medium text-gray-900">Recent Sync Operations</h3>
           </div>
 
-          {syncLogs.length === 0 ? (
+          {syncLogs.filter(log => log.sync_type !== 'automated').length === 0 ? (
             <p className="text-gray-500 text-sm">No sync operations yet</p>
           ) : (
             <div className="space-y-3">
-              {syncLogs.map((log) => (
+              {syncLogs.filter(log => log.sync_type !== 'automated').map((log) => (
                 <div key={log.id} className="border border-gray-200 rounded-lg p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div>
@@ -428,8 +428,8 @@ export default function SyncDashboard() {
             <p className="text-gray-500 text-sm">No unresolved errors</p>
           ) : (
             <div className="space-y-3">
-              {errors.map((error) => (
-                <div key={error.error_id} className="border border-gray-200 rounded-lg p-4">
+              {errors.map((error, index) => (
+                <div key={error.error_id || `error-${index}`} className="border border-gray-200 rounded-lg p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">

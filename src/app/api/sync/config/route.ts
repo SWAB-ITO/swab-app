@@ -34,7 +34,7 @@ export async function GET() {
     return NextResponse.json({
       config: config || null,
       stats: stats || [],
-      configured: !!config,
+      configured: config?.system_initialized || false,
     });
   } catch (error) {
     console.error('Error fetching sync config:', error);
@@ -81,8 +81,9 @@ export async function POST(request: NextRequest) {
         jotform_signup_form_id: jotformSignupFormId,
         jotform_setup_form_id: jotformSetupFormId,
         givebutter_campaign_code: givebutterCampaignCode,
-        configured_by: 'web_ui', // Could be user email in production
+        configured_by: 'web_ui',
         configured_at: new Date().toISOString(),
+        system_initialized: true,
       })
       .select()
       .single();

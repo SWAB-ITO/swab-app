@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
       const { data, error } = await supabase
         .from('sync_log')
         .select('*')
+        .neq('sync_type', 'automated')
         .order('started_at', { ascending: false })
         .limit(limit);
 

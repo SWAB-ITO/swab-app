@@ -1,13 +1,13 @@
 /**
- * TAG-BASED CONTACT SYNC
+ * ID-BASED CONTACT SYNC
  *
- * Syncs all contacts with "Mentors 2025" tag from Givebutter API to raw_gb_full_contacts
+ * Syncs contacts from Givebutter API by fetching specific contact IDs from mentors table
  *
  * Flow:
- * 1. Read tag filter from sync_config ("Mentors 2025")
- * 2. Query Givebutter API: GET /contacts?tags=Mentors+2025
- * 3. Upsert all results to raw_gb_full_contacts
- * 4. This keeps our contact list current without needing CSV uploads
+ * 1. Query mentors table for all gb_contact_id values
+ * 2. Fetch each contact by ID: GET /contacts/{id}
+ * 3. Upsert results to raw_gb_full_contacts
+ * 4. This syncs only the ~670 contacts we care about (not all 3,240+ tagged contacts)
  *
  * Usage: npm run sync:api-contacts
  */
@@ -21,12 +21,17 @@ import { Logger } from '../../lib/utils/logger';
 
 dotenvConfig({ path: resolve(process.cwd(), '.env.local') });
 
-async function syncGivebutterContactsByTag() {
-  const logger = new Logger('TagContactSync');
-  logger.info('Starting tag-based Givebutter contact sync');
+async function syncGivebutterContactsById() {
+  const logger = new Logger('IDContactSync');
+  logger.info('Starting ID-based Givebutter contact sync');
 
   const config = getSupabaseConfig();
   const supabase = createClient(config.url, config.serviceRoleKey || config.anonKey);
+
+  // Note: sync_log is managed by the orchestrator (route.ts) when run from UI
+  // When run directly via CLI, no sync_log entry is created (manual debugging)
+  const syncLogId: number | undefined = undefined;
+  const startTime = Date.now();
 
   // ============================================================================
   // STEP 1: Get configuration
@@ -43,9 +48,6 @@ async function syncGivebutterContactsByTag() {
     process.exit(1);
   }
 
-  const tagFilter = syncConfig.current_tag_filter || 'Mentors 2025';
-  logger.info(`Tag filter: ${tagFilter}`);
-
   // Initialize Givebutter client
   const gbClient = new GivebutterClient({
     apiKey: syncConfig.givebutter_api_key,
@@ -53,59 +55,171 @@ async function syncGivebutterContactsByTag() {
   });
 
   // ============================================================================
-  // STEP 2: Fetch all contacts with tag from Givebutter
+  // STEP 2: Get contact IDs from mentors table
   // ============================================================================
   console.log('\n' + '='.repeat(80));
-  console.log('🔄 TAG-BASED CONTACT SYNC');
+  console.log('🔄 CONTACT SYNC BY ID');
   console.log('='.repeat(80) + '\n');
-  console.log(`🏷️  Tag filter: "${tagFilter}"\n`);
 
-  logger.info('Fetching contacts from Givebutter API');
+  logger.info('Fetching contact IDs from mentors table');
 
-  let allContacts: any[] = [];
-  let page = 1;
-  let hasMore = true;
+  const { data: mentors, error: mentorsError } = await supabase
+    .from('mentors')
+    .select('gb_contact_id, mn_id')
+    .not('gb_contact_id', 'is', null);
 
-  try {
-    // Fetch all pages of contacts with the tag
-    while (hasMore) {
-      // Use the client's list method with tag filter
-      // Note: GivebutterClient needs a listContacts method that accepts tag filter
-      // For now, using a simplified approach - this may need adjustment based on GB API
-      const response = await gbClient.request('GET', '/contacts', {
-        tags: tagFilter,
-        page,
-        per_page: 100, // Max per page
-      });
+  if (mentorsError) {
+    logger.error('Failed to fetch mentors', mentorsError);
+    console.log('❌ Error fetching mentors from database\n');
 
-      const contacts = response.data || [];
-      allContacts = allContacts.concat(contacts);
-
-      logger.info(`Fetched page ${page}: ${contacts.length} contacts`);
-
-      // Check if there are more pages
-      hasMore = contacts.length === 100; // If we got a full page, there might be more
-      page++;
+    // Mark sync as failed
+    if (syncLogId) {
+      await supabase
+        .from('sync_log')
+        .update({
+          status: 'failed',
+          completed_at: new Date().toISOString(),
+          duration_seconds: Math.floor((Date.now() - startTime) / 1000),
+          error_message: 'Failed to fetch mentors from database',
+        })
+        .eq('id', syncLogId);
     }
 
-    logger.info(`Total contacts fetched: ${allContacts.length}`);
-    console.log(`✅ Fetched ${allContacts.length} contacts with tag "${tagFilter}"\n`);
-
-  } catch (error: any) {
-    logger.error('Failed to fetch contacts from Givebutter', error);
-    console.log(`❌ Error fetching contacts: ${error.message}\n`);
     process.exit(1);
   }
 
-  if (allContacts.length === 0) {
-    logger.warn('No contacts found with this tag');
-    console.log(`⚠️  No contacts found with tag "${tagFilter}"\n`);
-    console.log('💡 Make sure contacts in Givebutter have the correct tag.');
+  const contactIds = mentors
+    .map(m => m.gb_contact_id)
+    .filter((id): id is string => id !== null && id !== undefined);
+
+  console.log(`📋 Found ${contactIds.length} contacts to sync\n`);
+  logger.info(`Contact IDs to fetch: ${contactIds.length}`);
+
+  if (contactIds.length === 0) {
+    logger.warn('No contacts to sync');
+    console.log('⚠️  No contacts found in mentors table with gb_contact_id\n');
+    console.log('💡 Run CSV upload first to populate mentor contact IDs.');
+
+    // Mark sync as completed with no records
+    if (syncLogId) {
+      await supabase
+        .from('sync_log')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          duration_seconds: Math.floor((Date.now() - startTime) / 1000),
+          records_processed: 0,
+          records_inserted: 0,
+          records_failed: 0,
+        })
+        .eq('id', syncLogId);
+    }
+
     process.exit(0);
   }
 
   // ============================================================================
-  // STEP 3: Upsert to raw_gb_full_contacts
+  // STEP 3: Fetch each contact by ID from Givebutter
+  // ============================================================================
+  console.log('🔍 Fetching contacts from Givebutter API...\n');
+  logger.info('Fetching contacts by ID from Givebutter API');
+
+  let allContacts: any[] = [];
+  let successCount = 0;
+  let errorCount = 0;
+
+  try {
+    // Fetch contacts in batches with rate limiting
+    const BATCH_SIZE = 10; // Reduced from 50 to avoid rate limits
+    const BATCH_DELAY_MS = 2000; // 2 second delay between batches
+    const totalBatches = Math.ceil(contactIds.length / BATCH_SIZE);
+
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+      const startIndex = batchIndex * BATCH_SIZE;
+      const endIndex = Math.min(startIndex + BATCH_SIZE, contactIds.length);
+      const batch = contactIds.slice(startIndex, endIndex);
+
+      // Fetch contacts in this batch concurrently
+      const promises = batch.map(async (contactId) => {
+        try {
+          const contact = await gbClient.getContact(Number(contactId));
+          return { success: true, contact };
+        } catch (error: any) {
+          logger.error(`Failed to fetch contact ${contactId}`, error);
+          return { success: false, contactId, error: error.message };
+        }
+      });
+
+      const results = await Promise.all(promises);
+
+      // Collect successful contacts
+      results.forEach(result => {
+        if (result.success && 'contact' in result) {
+          allContacts.push(result.contact);
+          successCount++;
+        } else {
+          errorCount++;
+        }
+      });
+
+      console.log(`   Batch ${batchIndex + 1}/${totalBatches}: ${successCount}/${contactIds.length} contacts fetched`);
+      logger.info(`Batch ${batchIndex + 1}/${totalBatches} complete: ${successCount} successful, ${errorCount} errors`);
+
+      // Rate limiting: Wait between batches (except for the last one)
+      if (batchIndex < totalBatches - 1) {
+        await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+      }
+    }
+
+    console.log(`\n✅ Fetched ${successCount} contacts (${errorCount} errors)\n`);
+    logger.info(`Total contacts fetched: ${successCount}, errors: ${errorCount}`);
+
+  } catch (error: any) {
+    logger.error('Failed to fetch contacts from Givebutter', error);
+    console.log(`❌ Error fetching contacts: ${error.message}\n`);
+
+    // Mark sync as failed
+    if (syncLogId) {
+      await supabase
+        .from('sync_log')
+        .update({
+          status: 'failed',
+          completed_at: new Date().toISOString(),
+          duration_seconds: Math.floor((Date.now() - startTime) / 1000),
+          error_message: `Failed to fetch contacts: ${error.message}`,
+          records_processed: contactIds.length,
+          records_failed: contactIds.length,
+        })
+        .eq('id', syncLogId);
+    }
+
+    process.exit(1);
+  }
+
+  if (allContacts.length === 0) {
+    logger.warn('No contacts successfully fetched');
+    console.log('⚠️  No contacts could be fetched from Givebutter\n');
+
+    // Mark sync as completed but with all failures
+    if (syncLogId) {
+      await supabase
+        .from('sync_log')
+        .update({
+          status: 'completed',
+          completed_at: new Date().toISOString(),
+          duration_seconds: Math.floor((Date.now() - startTime) / 1000),
+          records_processed: contactIds.length,
+          records_inserted: 0,
+          records_failed: contactIds.length,
+        })
+        .eq('id', syncLogId);
+    }
+
+    process.exit(0);
+  }
+
+  // ============================================================================
+  // STEP 4: Upsert to raw_gb_full_contacts
   // ============================================================================
   console.log('💾 Upserting to raw_gb_full_contacts...\n');
   logger.info('Upserting contacts to database');
@@ -158,7 +272,7 @@ async function syncGivebutterContactsByTag() {
       date_created_utc: contact.created_at,
       last_modified_utc: contact.updated_at,
       custom_fields: contact.custom_fields,
-      source: 'api_tag_sync',
+      source: null, // Match CSV import behavior
     }));
 
     // Upsert batch
@@ -179,35 +293,37 @@ async function syncGivebutterContactsByTag() {
   }
 
   // ============================================================================
-  // STEP 4: Update sync timestamp
+  // STEP 5: Update sync timestamp
   // ============================================================================
   await supabase
     .from('sync_config')
-    .update({ last_sync_at: new Date().toISOString() })
+    .update({ last_gb_api_sync_at: new Date().toISOString() })
     .eq('id', 1);
 
   // ============================================================================
   // SUMMARY
   // ============================================================================
   console.log('\n' + '='.repeat(80));
-  console.log('✅ TAG-BASED SYNC COMPLETE');
+  console.log('✅ API CONTACT SYNC COMPLETE');
   console.log('='.repeat(80));
   console.log('📊 Results:');
-  console.log(`   Contacts fetched: ${allContacts.length}`);
+  console.log(`   Contact IDs from mentors: ${contactIds.length}`);
+  console.log(`   Contacts fetched: ${successCount}`);
+  console.log(`   Failed to fetch: ${errorCount}`);
   console.log(`   Successfully upserted: ${inserted}`);
-  console.log(`   Errors: ${errors}\n`);
+  console.log(`   Upsert errors: ${errors}\n`);
 
-  if (errors > 0) {
+  if (errors > 0 || errorCount > 0) {
     logger.warn('Some contacts failed to sync');
     console.log('⚠️  Some contacts failed to sync. Check logs for details.\n');
   }
 
-  console.log('💡 Next Steps:');
-  console.log('   1. Contacts are now in raw_gb_full_contacts');
-  console.log('   2. Run ETL to match contacts to mentors');
-  console.log('   3. Contact IDs will be automatically linked during ETL\n');
+  console.log('💡 Purpose:');
+  console.log('   - Keeps contact data fresh between CSV uploads');
+  console.log('   - Syncs only the ~670 mentors we care about');
+  console.log('   - Updates custom fields, tags, and contact info from Givebutter\n');
 
-  logger.info('Tag-based contact sync complete');
+  logger.info('API contact sync complete');
 }
 
-syncGivebutterContactsByTag();
+syncGivebutterContactsById();

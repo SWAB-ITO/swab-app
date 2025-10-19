@@ -293,6 +293,19 @@ function parseScriptOutput(output: string): {
     stats.recordsInserted = parseInt(insertedMatch[1], 10);
   }
 
+  // API Contact Sync patterns
+  // Look for "Contact IDs from mentors: X"
+  const contactIdsMatch = output.match(/Contact IDs from mentors:\s*(\d+)/i);
+  if (contactIdsMatch) {
+    stats.recordsProcessed = parseInt(contactIdsMatch[1], 10);
+  }
+
+  // Look for "Successfully upserted: X"
+  const upsertedMatch = output.match(/Successfully upserted:\s*(\d+)/i);
+  if (upsertedMatch) {
+    stats.recordsInserted = parseInt(upsertedMatch[1], 10);
+  }
+
   // Look for patterns like "Errors: 3" or "Errors logged: 3"
   const errorsMatch = output.match(/Errors(?: logged)?:\s*(\d+)/i);
   if (errorsMatch) {

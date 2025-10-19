@@ -45,7 +45,7 @@ export interface SyncLogEntry {
 
 export class SyncOrchestrator {
   private supabase: ReturnType<typeof createClient<Database>>;
-  private syncLogId?: string;
+  private syncLogId?: number;
 
   constructor() {
     const config = getSupabaseConfig();
@@ -55,7 +55,7 @@ export class SyncOrchestrator {
   /**
    * Start a sync log entry
    */
-  async startSyncLog(syncType: SyncType, triggeredBy: string = 'manual'): Promise<string> {
+  async startSyncLog(syncType: SyncType, triggeredBy: string = 'manual'): Promise<number> {
     const { data, error } = await this.supabase
       .from('sync_log')
       .insert({
@@ -79,7 +79,7 @@ export class SyncOrchestrator {
    * Complete a sync log entry
    */
   async completeSyncLog(
-    logId: string,
+    logId: number,
     status: SyncStatus,
     stats?: Partial<SyncLogEntry>
   ) {
@@ -100,7 +100,7 @@ export class SyncOrchestrator {
   /**
    * Get sync start time
    */
-  async getSyncStartTime(logId: string): Promise<string | null> {
+  async getSyncStartTime(logId: number): Promise<string | null> {
     const { data } = await this.supabase
       .from('sync_log')
       .select('started_at')

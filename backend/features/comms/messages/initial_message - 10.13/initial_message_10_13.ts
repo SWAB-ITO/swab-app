@@ -21,23 +21,12 @@ dotenv.config({ path: resolve(process.cwd(), '.env.local') });
 // ============================================================================
 
 const CAMPAIGN = {
-  name: 'Initial Message - October 13',
-  description: 'First communication to all signed up mentors with Event Day details',
+  name: 'Corrected Message - October 14',
+  description: 'Correction with updated training dates and accurate fundraising info',
 
-  // Text messages (full message for SMS)
-  textMessages: {
-    complete: (name: string) =>
-      `Hi ${name}!\n\nThank you for signing up as a mentor for SWAB Event Day, Nov 9th! Check your email for the full details, but in short...\n\nYou're all set - your fundraising page is created & we see you've fully fundraised your $75!\n\nNext steps: Mentor training (Oct 20, 21, or 28) sign up details coming soon. Partner/group info coming after signups close Friday, Oct 17. Tell your friends to sign up before the deadline!\n\nGot questions? info@swabuga.org. As always, GO SWAB!`,
-
-    needs_fundraising: (name: string, amountRaised: number, remaining: number) =>
-      `Hi ${name}!\n\nThank you for signing up as a mentor for SWAB Event Day, Nov 9th! Check your email for the full details, but in short...\n\nYou're almost there - your fundraising page is created & you've raised $${amountRaised}! Just $${remaining} more to hit your $75 goal.\n\nNext steps: Finish fundraising, then mentor training (Oct 20, 21, or 28) sign up details coming soon. Partner/group info coming after signups close Friday, Oct 17. Tell your friends to sign up!\n\nGot questions? info@swabuga.org. As always, GO SWAB!`,
-
-    needs_page: (name: string, email: string) =>
-      `Hi ${name}!\n\nThank you for signing up as a mentor for SWAB Event Day, Nov 9th! Check your email for the full details, but in short...\n\nAction needed: Create your fundraising page. Use your ${email} email, select "Mentors 2025" team, set goal to $75, after you click this link: https://givebutter.com/SWABUGA2025/join\n\nOnce your page is set up, just fundraise $75 then attend mentor training (Oct 20, 21, or 28). Partner/group info coming after signups close Friday, Oct 17. Tell your friends to sign up!\n\nQuestions? info@swabuga.org. As always, GO SWAB!`,
-
-    needs_setup: (name: string, email: string) =>
-      `Hi ${name}!\n\nThank you for signing up as a mentor for SWAB Event Day, Nov 9th! Check your email for the full details, but in short...\n\nAction needed: Check this email (${email}) for a "Next Steps..." message from SWAB with a fundraising setup link.\n\nOnce you complete setup & fundraise $75, you'll just attend mentor training (Oct 20, 21, or 28). Partner/group info coming after signups close Friday, Oct 17. Tell friends to sign up!\n\nQuestions? info@swabuga.org. As always, GO SWAB!`,
-  },
+  // Unified text message (same for all mentors regardless of status)
+  textMessage: (name: string, email: string) =>
+    `✨ Updated & Corrected Info (As of 4:00pm 10/14) ✨\n\nHey again ${name}!\n\nWe are still ironing out the Mentor wrinkles this year & we're sorry for the confusion, but we have some updates:\n\n• Mentor Training dates moved to Oct 27, 28, 29 (giving you more fundraising time!)\n• Check your email ${email} for corrected fundraising status/instructions and all the details you need.\n\nContact info@swabuga.org with any issues and as always, GO SWAB!`,
 
   // Email custom sections (only the status-specific middle part)
   emailCustomSections: {
@@ -92,27 +81,26 @@ function composeMessages(mentor: Mentor): { textMessage: string; emailCustomSect
   const amountRaised = mentor.amount_raised || 0;
   const remaining = Math.max(0, 75 - amountRaised);
 
-  let textMessage: string;
+  // UNIFIED TEXT MESSAGE - Same for everyone
+  const textMessage = CAMPAIGN.textMessage(name, email);
+
+  // EMAIL CUSTOM SECTION - Status-specific
   let emailCustomSection: string;
 
   switch (status) {
     case 'complete':
-      textMessage = CAMPAIGN.textMessages.complete(name);
       emailCustomSection = CAMPAIGN.emailCustomSections.complete();
       break;
 
     case 'needs_fundraising':
-      textMessage = CAMPAIGN.textMessages.needs_fundraising(name, amountRaised, remaining);
       emailCustomSection = CAMPAIGN.emailCustomSections.needs_fundraising(amountRaised, remaining);
       break;
 
     case 'needs_page':
-      textMessage = CAMPAIGN.textMessages.needs_page(name, email);
       emailCustomSection = CAMPAIGN.emailCustomSections.needs_page(email);
       break;
 
     case 'needs_setup':
-      textMessage = CAMPAIGN.textMessages.needs_setup(name, email);
       emailCustomSection = CAMPAIGN.emailCustomSections.needs_setup(email);
       break;
   }
@@ -200,8 +188,20 @@ async function runCampaign() {
   console.log(`   Text: ${avgTextLength} characters (~${Math.ceil(avgTextLength / 160)} SMS)`);
   console.log(`   Email custom section: ${avgEmailLength} characters\n`);
 
-  // Show preview of first 3 from each status
-  console.log('📋 Message Previews:\n');
+  // Show unified text message
+  console.log('🔍 SPOT CHECK PREVIEWS:\n');
+  console.log('='.repeat(80));
+
+  const sampleMentor = updates[0];
+  console.log('\n💬 UNIFIED TEXT MESSAGE (Same for all 677 mentors)');
+  console.log('-'.repeat(80));
+  console.log(`${sampleMentor.textLength} characters (~${Math.ceil(sampleMentor.textLength / 160)} SMS)\n`);
+  console.log(sampleMentor.textMessage);
+  console.log();
+
+  // Show status-specific email custom sections
+  console.log('\n📧 EMAIL CUSTOM SECTIONS (Status-specific)');
+  console.log('='.repeat(80));
 
   const statusOrder: Array<'complete' | 'needs_fundraising' | 'needs_page' | 'needs_setup'> =
     ['complete', 'needs_fundraising', 'needs_page', 'needs_setup'];
@@ -213,9 +213,8 @@ async function runCampaign() {
       console.log('-'.repeat(80));
 
       const sample = statusUpdates[0];
-      console.log(`\n💬 TEXT MESSAGE (${sample.textLength} chars):`);
-      console.log(sample.textMessage);
-      console.log(`\n📧 EMAIL CUSTOM SECTION (${sample.emailLength} chars):`);
+      console.log(`\nExample: ${sample.mn_id} - ${sample.name}`);
+      console.log(`\n📧 SECTION (${sample.emailLength} chars):`);
       console.log(sample.emailCustomSection);
       console.log();
     }

@@ -34,6 +34,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      csv_import_log: {
+        Row: {
+          created_at: string | null
+          duplicates_detected: number | null
+          file_size_bytes: number | null
+          filename: string
+          id: number
+          mentors_matched: number | null
+          new_contact_ids_captured: number | null
+          processing_time_ms: number | null
+          total_contacts: number | null
+          uploaded_at: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          duplicates_detected?: number | null
+          file_size_bytes?: number | null
+          filename: string
+          id?: number
+          mentors_matched?: number | null
+          new_contact_ids_captured?: number | null
+          processing_time_ms?: number | null
+          total_contacts?: number | null
+          uploaded_at?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          duplicates_detected?: number | null
+          file_size_bytes?: number | null
+          filename?: string
+          id?: number
+          mentors_matched?: number | null
+          new_contact_ids_captured?: number | null
+          processing_time_ms?: number | null
+          total_contacts?: number | null
+          uploaded_at?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: []
+      }
       mentors: {
         Row: {
           amount_raised: number | null
@@ -137,40 +179,55 @@ export type Database = {
         Row: {
           chosen_value: string | null
           created_at: string | null
+          email: string | null
           error_message: string | null
           error_type: string
           field_name: string | null
           id: number
           local_value: string | null
           mn_id: string | null
+          phone: string | null
+          raw_data: Json | null
           remote_value: string | null
           resolved: boolean | null
+          severity: string | null
+          source_table: string | null
           updated_at: string | null
         }
         Insert: {
           chosen_value?: string | null
           created_at?: string | null
+          email?: string | null
           error_message?: string | null
           error_type: string
           field_name?: string | null
           id?: number
           local_value?: string | null
           mn_id?: string | null
+          phone?: string | null
+          raw_data?: Json | null
           remote_value?: string | null
           resolved?: boolean | null
+          severity?: string | null
+          source_table?: string | null
           updated_at?: string | null
         }
         Update: {
           chosen_value?: string | null
           created_at?: string | null
+          email?: string | null
           error_message?: string | null
           error_type?: string
           field_name?: string | null
           id?: number
           local_value?: string | null
           mn_id?: string | null
+          phone?: string | null
+          raw_data?: Json | null
           remote_value?: string | null
           resolved?: boolean | null
+          severity?: string | null
+          source_table?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -538,6 +595,7 @@ export type Database = {
           gender: string | null
           last_name: string | null
           middle_name: string | null
+          mn_id: string | null
           partner_preference: string | null
           personal_email: string | null
           phone: string | null
@@ -556,6 +614,7 @@ export type Database = {
           gender?: string | null
           last_name?: string | null
           middle_name?: string | null
+          mn_id?: string | null
           partner_preference?: string | null
           personal_email?: string | null
           phone?: string | null
@@ -574,6 +633,7 @@ export type Database = {
           gender?: string | null
           last_name?: string | null
           middle_name?: string | null
+          mn_id?: string | null
           partner_preference?: string | null
           personal_email?: string | null
           phone?: string | null
@@ -590,11 +650,18 @@ export type Database = {
       }
       sync_config: {
         Row: {
+          configured_at: string | null
+          configured_by: string | null
           contact_sync_interval_hours: number | null
           created_at: string | null
           current_campaign_code: string | null
           current_tag_filter: string | null
+          givebutter_api_key: string | null
+          givebutter_campaign_code: string | null
           id: number
+          jotform_api_key: string | null
+          jotform_setup_form_id: string | null
+          jotform_signup_form_id: string | null
           last_csv_upload_at: string | null
           last_gb_api_sync_at: string | null
           last_jotform_sync_at: string | null
@@ -604,11 +671,18 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          configured_at?: string | null
+          configured_by?: string | null
           contact_sync_interval_hours?: number | null
           created_at?: string | null
           current_campaign_code?: string | null
           current_tag_filter?: string | null
+          givebutter_api_key?: string | null
+          givebutter_campaign_code?: string | null
           id?: number
+          jotform_api_key?: string | null
+          jotform_setup_form_id?: string | null
+          jotform_signup_form_id?: string | null
           last_csv_upload_at?: string | null
           last_gb_api_sync_at?: string | null
           last_jotform_sync_at?: string | null
@@ -618,11 +692,18 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          configured_at?: string | null
+          configured_by?: string | null
           contact_sync_interval_hours?: number | null
           created_at?: string | null
           current_campaign_code?: string | null
           current_tag_filter?: string | null
+          givebutter_api_key?: string | null
+          givebutter_campaign_code?: string | null
           id?: number
+          jotform_api_key?: string | null
+          jotform_setup_form_id?: string | null
+          jotform_signup_form_id?: string | null
           last_csv_upload_at?: string | null
           last_gb_api_sync_at?: string | null
           last_jotform_sync_at?: string | null
@@ -637,50 +718,56 @@ export type Database = {
         Row: {
           completed_at: string | null
           created_at: string | null
-          duration_ms: number | null
+          duration_seconds: number | null
+          error_details: Json | null
           error_message: string | null
           id: number
           metadata: Json | null
-          records_created: number | null
           records_failed: number | null
+          records_inserted: number | null
           records_processed: number | null
           records_updated: number | null
           source: string | null
           started_at: string | null
           status: string | null
           sync_type: string
+          triggered_by: string | null
         }
         Insert: {
           completed_at?: string | null
           created_at?: string | null
-          duration_ms?: number | null
+          duration_seconds?: number | null
+          error_details?: Json | null
           error_message?: string | null
           id?: number
           metadata?: Json | null
-          records_created?: number | null
           records_failed?: number | null
+          records_inserted?: number | null
           records_processed?: number | null
           records_updated?: number | null
           source?: string | null
           started_at?: string | null
           status?: string | null
           sync_type: string
+          triggered_by?: string | null
         }
         Update: {
           completed_at?: string | null
           created_at?: string | null
-          duration_ms?: number | null
+          duration_seconds?: number | null
+          error_details?: Json | null
           error_message?: string | null
           id?: number
           metadata?: Json | null
-          records_created?: number | null
           records_failed?: number | null
+          records_inserted?: number | null
           records_processed?: number | null
           records_updated?: number | null
           source?: string | null
           started_at?: string | null
           status?: string | null
           sync_type?: string
+          triggered_by?: string | null
         }
         Relationships: []
       }
@@ -689,6 +776,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_sync_stats: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          avg_duration_seconds: number
+          failed_syncs: number
+          last_sync: string
+          sync_type: string
+          total_syncs: number
+        }[]
+      }
+      link_campaign_members_to_mentors: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       normalize_email: {
         Args: { email: string }
         Returns: string

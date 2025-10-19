@@ -534,10 +534,14 @@ function ApiConfigContent() {
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
                 <h4 className="font-medium text-blue-900 mb-2">Configuration Status</h4>
                 <div className="space-y-2 text-sm text-blue-800">
-                  <p>
-                    ✓ Configured on {new Date(storedConfig.config.configured_at).toLocaleDateString()} at{' '}
-                    {new Date(storedConfig.config.configured_at).toLocaleTimeString()}
-                  </p>
+                  {storedConfig.config.configured_at ? (
+                    <p>
+                      ✓ Configured on {new Date(storedConfig.config.configured_at).toLocaleDateString()} at{' '}
+                      {new Date(storedConfig.config.configured_at).toLocaleTimeString()}
+                    </p>
+                  ) : (
+                    <p>✓ System configured</p>
+                  )}
                   {storedConfig.stats && storedConfig.stats.length > 0 && (
                     <div className="mt-3">
                       <p className="font-medium mb-1">Last Sync Times:</p>

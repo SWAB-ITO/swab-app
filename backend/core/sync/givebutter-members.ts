@@ -117,13 +117,20 @@ async function syncMembers() {
       try {
         const parsed = {
           member_id: member.id,
+          mn_id: null, // Will be linked later during ETL
           first_name: member.first_name,
           last_name: member.last_name,
+          display_name: member.display_name,
           email: member.email,
           phone: member.phone,
+          picture: member.picture,
           amount_raised: member.raised,
-          profile_url: member.url,
-          raw_data: member, // Store full member object for reference
+          goal: member.goal,
+          donors: member.donors,
+          items: member.items,
+          url: member.url,
+          created_at_gb: null, // Not provided in members API
+          updated_at_gb: null, // Not provided in members API
         };
 
         // Upsert (insert or update if member_id exists)

@@ -84,8 +84,8 @@ function parseSubmission(submission: JotformSubmission) {
     email: email,
     phone: phone,
 
-    // Store complete submission
-    raw_data: answers,
+    // Status (look for status field)
+    status: getAnswerByName('status') || 'submitted',
 
     // Metadata
     submitted_at: new Date(submission.created_at).toISOString(),
