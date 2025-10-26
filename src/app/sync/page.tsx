@@ -3,11 +3,13 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { StatusBadge } from '@/components/composite/status-badge';
-import { ConsoleOutput } from '@/components/composite/console-output';
-import { Settings, Upload, RefreshCw, Play, AlertCircle, CheckCircle, Clock, FileText, Database } from 'lucide-react';
+import { StatCard } from '@/components/composite/stat-card';
+import { SyncActionCard } from '@/components/features/sync/sync-action-card';
+import { SyncLogList, SyncLog as SyncLogType } from '@/components/features/sync/sync-log-list';
+import { Settings, Upload, RefreshCw, Play, AlertCircle, CheckCircle, Clock, FileText } from 'lucide-react';
 
 interface InitStatus {
   initialized: boolean;
@@ -15,17 +17,7 @@ interface InitStatus {
   lastSyncAt?: string;
 }
 
-interface SyncLog {
-  id: string;
-  sync_type: string;
-  status: string;
-  started_at: string;
-  completed_at?: string;
-  duration_seconds?: number;
-  records_processed?: number;
-  records_inserted?: number;
-  error_message?: string;
-}
+// Using SyncLog type from SyncLogList component
 
 interface ConflictError {
   error_id: string;
@@ -38,7 +30,7 @@ interface ConflictError {
 
 export default function SyncDashboard() {
   const [initStatus, setInitStatus] = useState<InitStatus | null>(null);
-  const [syncLogs, setSyncLogs] = useState<SyncLog[]>([]);
+  const [syncLogs, setSyncLogs] = useState<SyncLogType[]>([]);
   const [errors, setErrors] = useState<ConflictError[]>([]);
   const [syncRunning, setSyncRunning] = useState(false);
   const [csvUploading, setCsvUploading] = useState(false);
@@ -216,201 +208,93 @@ export default function SyncDashboard() {
 
       <Separator className="mb-8" />
 
-        {/* Status Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">System Status</CardTitle>
-              {initStatus?.initialized ? (
-                <CheckCircle className="h-4 w-4 text-green-600" />
-              ) : (
-                <AlertCircle className="h-4 w-4 text-yellow-600" />
-              )}
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {initStatus?.initialized ? 'Initialized' : 'Not Configured'}
-              </div>
-              {initStatus?.configuredAt && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Configured: {new Date(initStatus.configuredAt).toLocaleDateString()}
-                </p>
-              )}
-            </CardContent>
-          </Card>
+      {/* Status Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <StatCard
+          title="System Status"
+          value={initStatus?.initialized ? 'Initialized' : 'Not Configured'}
+          description={initStatus?.configuredAt
+            ? `Configured: ${new Date(initStatus.configuredAt).toLocaleDateString()}`
+            : 'Not configured yet'}
+          icon={initStatus?.initialized ? CheckCircle : AlertCircle}
+          colorScheme={initStatus?.initialized ? 'success' : 'warning'}
+        />
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Last Sync</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {initStatus?.lastSyncAt
-                  ? new Date(initStatus.lastSyncAt).toLocaleDateString()
-                  : 'Never'}
-              </div>
-              {initStatus?.lastSyncAt && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {new Date(initStatus.lastSyncAt).toLocaleTimeString()}
-                </p>
-              )}
-            </CardContent>
-          </Card>
+        <StatCard
+          title="Last Sync"
+          value={initStatus?.lastSyncAt
+            ? new Date(initStatus.lastSyncAt).toLocaleDateString()
+            : 'Never'}
+          description={initStatus?.lastSyncAt
+            ? new Date(initStatus.lastSyncAt).toLocaleTimeString()
+            : 'No syncs yet'}
+          icon={Clock}
+        />
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Errors</CardTitle>
-              <AlertCircle className="h-4 w-4 text-orange-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{errors.length}</div>
-              <p className="text-xs text-muted-foreground mt-1">Unresolved issues</p>
-            </CardContent>
-          </Card>
-        </div>
+        <StatCard
+          title="Active Errors"
+          value={errors.length}
+          description="Unresolved issues"
+          icon={AlertCircle}
+          colorScheme={errors.length > 0 ? 'error' : 'success'}
+        />
+      </div>
 
-        {/* Action Buttons */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          {/* Periodic Sync */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <RefreshCw className="h-5 w-5" />
-                Periodic Sync (Tier 2)
-              </CardTitle>
-              <CardDescription>
-                Sync from APIs: Jotform signups/setup + Givebutter members + ETL + API contact sync
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-            <Button
-              onClick={handlePeriodicSync}
-              disabled={!initStatus?.initialized || syncRunning}
-              className="w-full"
+      {/* Sync Actions */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <SyncActionCard
+          icon={RefreshCw}
+          title="Periodic Sync"
+          description="Sync from APIs: Jotform signups/setup + Givebutter members + ETL + API contact sync"
+          tier={2}
+          actionLabel="Run Periodic Sync"
+          loading={syncRunning}
+          disabled={!initStatus?.initialized}
+          onAction={handlePeriodicSync}
+          outputLines={syncOutput}
+          onClearOutput={() => setSyncOutput([])}
+        />
+
+        <SyncActionCard
+          icon={Upload}
+          title="CSV Upload"
+          description="Upload Givebutter full export → match contacts → capture contact_ids"
+          tier={3}
+          actionLabel="Upload CSV"
+          loading={csvUploading}
+          onAction={() => document.getElementById('csv-upload')?.click()}
+          outputLines={uploadOutput}
+          onClearOutput={() => setUploadOutput([])}
+        >
+          <div className="border-2 border-dashed border-border/40 rounded-lg p-6 text-center bg-muted/10">
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleFileUpload}
+              className="hidden"
+              id="csv-upload"
+              disabled={csvUploading}
+            />
+            <label
+              htmlFor="csv-upload"
+              className={`${csvUploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} flex flex-col items-center`}
             >
-              {syncRunning ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Syncing...
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4 mr-2" />
-                  Run Periodic Sync
-                </>
-              )}
-            </Button>
+              <Upload className="w-8 h-8 text-gray-400 mb-2" />
+              <p className="text-sm font-medium text-gray-900 mb-1">
+                {csvUploading ? 'Uploading...' : 'Click to upload CSV'}
+              </p>
+              <p className="text-xs text-gray-500">Givebutter full contact export</p>
+            </label>
+          </div>
+        </SyncActionCard>
+      </div>
 
-              <ConsoleOutput
-                lines={syncOutput}
-                loading={syncRunning}
-                showCopy
-                showClear
-                onClear={() => setSyncOutput([])}
-              />
-            </CardContent>
-          </Card>
-
-          {/* CSV Upload */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Upload className="h-5 w-5" />
-                CSV Upload (Tier 3)
-              </CardTitle>
-              <CardDescription>
-                Upload Givebutter full export → match contacts → capture contact_ids
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-
-            <div className="border-2 border-dashed border-border/40 rounded-lg p-6 text-center bg-muted/10">
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleFileUpload}
-                className="hidden"
-                id="csv-upload"
-                disabled={csvUploading}
-              />
-              <label
-                htmlFor="csv-upload"
-                className={`${csvUploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} flex flex-col items-center`}
-              >
-                <Upload className="w-8 h-8 text-gray-400 mb-2" />
-                <p className="text-sm font-medium text-gray-900 mb-1">
-                  {csvUploading ? 'Uploading...' : 'Click to upload CSV'}
-                </p>
-                <p className="text-xs text-gray-500">Givebutter full contact export</p>
-              </label>
-            </div>
-
-              <ConsoleOutput
-                lines={uploadOutput}
-                loading={csvUploading}
-                showCopy
-                showClear
-                onClear={() => setUploadOutput([])}
-              />
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Recent Sync Logs */}
-        <Card className="mb-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Database className="h-5 w-5" />
-              Recent Sync Operations
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-          {syncLogs.filter(log => log.sync_type !== 'automated').length === 0 ? (
-            <p className="text-muted-foreground text-sm">No sync operations yet</p>
-          ) : (
-            <div className="space-y-3">
-              {syncLogs.filter(log => log.sync_type !== 'automated').map((log) => (
-                <div key={log.id} className="bg-muted/30 rounded-lg p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-gray-900">{log.sync_type.replace(/_/g, ' ')}</span>
-                        <StatusBadge status={log.status as 'pending' | 'running' | 'completed' | 'failed'} />
-                      </div>
-                      <p className="text-xs text-gray-500">
-                        Started: {new Date(log.started_at).toLocaleString()}
-                      </p>
-                      {log.completed_at && (
-                        <p className="text-xs text-gray-500">
-                          Duration: {log.duration_seconds}s
-                        </p>
-                      )}
-                    </div>
-                    {log.records_processed !== undefined && (
-                      <div className="text-right text-sm">
-                        <div className="text-gray-600">
-                          Processed: <span className="font-medium">{log.records_processed}</span>
-                        </div>
-                        {log.records_inserted !== undefined && (
-                          <div className="text-green-600">
-                            Inserted: <span className="font-medium">{log.records_inserted}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  {log.error_message && (
-                    <div className="mt-2 p-2 bg-red-50 rounded text-xs text-red-700">
-                      {log.error_message}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-          </CardContent>
-        </Card>
+      {/* Recent Sync Logs */}
+      <SyncLogList
+        logs={syncLogs}
+        className="mb-8"
+        maxLogs={10}
+      />
 
         {/* Errors and Conflicts */}
         <Card>
