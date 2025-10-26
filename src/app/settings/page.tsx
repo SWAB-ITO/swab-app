@@ -5,7 +5,13 @@ import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog } from '@/components/ui/dialog';
-import { Settings as SettingsIcon, User, Database, Bell, Palette } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Settings as SettingsIcon, User, Database, Bell, Palette, CheckCircle2, AlertCircle } from 'lucide-react';
 
 type Tab = 'account' | 'api-config' | 'preferences';
 type SyncTab = 'config' | 'forms' | 'upload' | 'sync';
@@ -22,91 +28,81 @@ function SettingsContent() {
   }, [tabParam]);
 
   return (
-    <div className="p-6">
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">⚙️ Settings</h1>
-        </div>
-
-        {/* Tabs */}
-        <div className="border-b border-gray-200 mb-6">
-          <div className="flex space-x-8">
-            {[
-              { id: 'account' as Tab, label: 'Account' },
-              { id: 'api-config' as Tab, label: 'API Configuration' },
-              { id: 'preferences' as Tab, label: 'Preferences' },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`pb-4 px-2 font-medium transition-colors ${
-                  activeTab === tab.id
-                    ? 'border-b-2 border-blue-600 text-blue-600'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Tab Content */}
-        {activeTab === 'account' && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <User className="h-5 w-5 text-gray-600" />
-              <h2 className="text-xl font-semibold">Account</h2>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  User Profile
-                </label>
-                <p className="text-sm text-gray-600">User authentication and profile management coming soon</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Session Management
-                </label>
-                <p className="text-sm text-gray-600">Login/logout functionality coming soon</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'api-config' && <ApiConfigContent />}
-
-        {activeTab === 'preferences' && (
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <Palette className="h-5 w-5 text-gray-600" />
-              <h2 className="text-xl font-semibold">Preferences</h2>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Theme
-                </label>
-                <p className="text-sm text-gray-600">Light/Dark mode toggle coming soon</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Language
-                </label>
-                <p className="text-sm text-gray-600">Multi-language support coming soon</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notifications
-                </label>
-                <p className="text-sm text-gray-600">Email and push notification settings coming soon</p>
-              </div>
-            </div>
-          </div>
-        )}
+    <div className="container mx-auto p-6 max-w-7xl">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-4xl font-bold tracking-tight mb-2">Settings</h1>
+        <p className="text-muted-foreground text-lg">Manage your account and application preferences</p>
       </div>
+
+      <Separator className="mb-8" />
+
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as Tab)} className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="account" className="flex items-center gap-2">
+            <User className="h-4 w-4" />
+            Account
+          </TabsTrigger>
+          <TabsTrigger value="api-config" className="flex items-center gap-2">
+            <Database className="h-4 w-4" />
+            API Configuration
+          </TabsTrigger>
+          <TabsTrigger value="preferences" className="flex items-center gap-2">
+            <Palette className="h-4 w-4" />
+            Preferences
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="account" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Account Settings</CardTitle>
+              <CardDescription>Manage your account details and authentication</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label>User Profile</Label>
+                <p className="text-sm text-muted-foreground">User authentication and profile management coming soon</p>
+              </div>
+              <Separator />
+              <div className="space-y-2">
+                <Label>Session Management</Label>
+                <p className="text-sm text-muted-foreground">Login/logout functionality coming soon</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="api-config">
+          <ApiConfigContent />
+        </TabsContent>
+
+        <TabsContent value="preferences" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Appearance & Preferences</CardTitle>
+              <CardDescription>Customize your application experience</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label>Theme</Label>
+                <p className="text-sm text-muted-foreground">Light/Dark mode toggle coming soon</p>
+              </div>
+              <Separator />
+              <div className="space-y-2">
+                <Label>Language</Label>
+                <p className="text-sm text-muted-foreground">Multi-language support coming soon</p>
+              </div>
+              <Separator />
+              <div className="space-y-2">
+                <Label>Notifications</Label>
+                <p className="text-sm text-muted-foreground">Email and push notification settings coming soon</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -173,6 +169,7 @@ function ApiConfigContent() {
     givebutter: '',
     jotformSignupForm: '',
     jotformSetupForm: '',
+    jotformTrainingSignupForm: '',
     givebutterCampaign: '',
   });
   const [testingApis, setTestingApis] = useState(false);
@@ -238,6 +235,7 @@ function ApiConfigContent() {
             givebutter: '', // Don't show API keys for security
             jotformSignupForm: data.config.jotform_signup_form_id,
             jotformSetupForm: data.config.jotform_setup_form_id,
+            jotformTrainingSignupForm: data.config.jotform_training_signup_form_id || '',
             givebutterCampaign: data.config.givebutter_campaign_code,
           });
         }
@@ -320,6 +318,7 @@ function ApiConfigContent() {
           givebutterApiKey: givebutterKey,
           jotformSignupFormId: apiKeys.jotformSignupForm,
           jotformSetupFormId: apiKeys.jotformSetupForm,
+          jotformTrainingSignupFormId: apiKeys.jotformTrainingSignupForm,
           givebutterCampaignCode: apiKeys.givebutterCampaign,
         }),
       });
@@ -478,95 +477,63 @@ function ApiConfigContent() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <div className="flex items-center gap-3 mb-4">
-          <Database className="h-5 w-5 text-gray-600" />
-          <h2 className="text-xl font-semibold">API Configuration & Data Sync</h2>
-        </div>
-        <p className="text-gray-600 mb-6">Configure API keys and run the complete data sync process</p>
-      </div>
+    <>
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Database className="h-5 w-5" />
+          API Configuration & Data Sync
+        </CardTitle>
+        <CardDescription>Configure API keys and run the complete data sync process</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as SyncTab)} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="config">1. Configure</TabsTrigger>
+            <TabsTrigger value="forms" disabled={!apiKeys.jotform && !storedConfig?.configured}>2. Forms</TabsTrigger>
+            <TabsTrigger value="upload" disabled={!apiKeys.jotformSignupForm || !apiKeys.jotformSetupForm || !apiKeys.jotformTrainingSignupForm || !apiKeys.givebutterCampaign}>3. Upload</TabsTrigger>
+            <TabsTrigger value="sync">4. Sync</TabsTrigger>
+          </TabsList>
 
-      {/* Tabs */}
-      <div className="border-b border-gray-200 mb-6">
-        <div className="flex space-x-8">
-          {[
-            { id: 'config' as SyncTab, label: '1. Configure APIs' },
-            { id: 'forms' as SyncTab, label: '2. Select Forms', disabled: !apiKeys.jotform && !storedConfig?.configured },
-            { id: 'upload' as SyncTab, label: '3. Upload CSV', disabled: !apiKeys.jotformSignupForm || !apiKeys.givebutterCampaign },
-            { id: 'sync' as SyncTab, label: '4. Run Sync', disabled: false },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => !tab.disabled && setActiveTab(tab.id)}
-              disabled={tab.disabled}
-              className={`pb-4 px-2 font-medium transition-colors ${
-                activeTab === tab.id
-                  ? 'border-b-2 border-blue-600 text-blue-600'
-                  : tab.disabled
-                  ? 'text-gray-300 cursor-not-allowed'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Tab Content */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        {/* Config Tab */}
-        {activeTab === 'config' && (
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold mb-4">API Configuration</h3>
-              <p className="text-gray-600 mb-6">
-                {storedConfig?.configured
-                  ? 'Your sync configuration is saved. Edit below or run a manual sync.'
-                  : 'Enter your API keys to connect with Jotform and Givebutter'}
-              </p>
-            </div>
-
+          <TabsContent value="config" className="space-y-6">
             {/* Configuration Status */}
             {storedConfig?.configured && storedConfig.config && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-                <h4 className="font-medium text-blue-900 mb-2">Configuration Status</h4>
-                <div className="space-y-2 text-sm text-blue-800">
-                  {storedConfig.config.configured_at ? (
-                    <p>
-                      ✓ Configured on {new Date(storedConfig.config.configured_at).toLocaleDateString()} at{' '}
+              <Alert>
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertTitle>Configuration Active</AlertTitle>
+                <AlertDescription className="space-y-2">
+                  {storedConfig.config.configured_at && (
+                    <p className="text-sm">
+                      Configured on {new Date(storedConfig.config.configured_at).toLocaleDateString()} at{' '}
                       {new Date(storedConfig.config.configured_at).toLocaleTimeString()}
                     </p>
-                  ) : (
-                    <p>✓ System configured</p>
                   )}
                   {storedConfig.stats && storedConfig.stats.length > 0 && (
-                    <div className="mt-3">
-                      <p className="font-medium mb-1">Last Sync Times:</p>
-                      <ul className="space-y-1 ml-4">
+                    <div className="mt-2">
+                      <p className="text-sm font-medium mb-1">Last Sync Times:</p>
+                      <ul className="space-y-1 text-sm">
                         {storedConfig.stats.map((stat) => (
                           <li key={stat.sync_type}>
                             {stat.sync_type}: {stat.last_sync ? new Date(stat.last_sync).toLocaleString() : 'Never'}{' '}
-                            {stat.failed_syncs > 0 && <span className="text-red-600">({stat.failed_syncs} failed)</span>}
+                            {stat.failed_syncs > 0 && <span className="text-destructive">({stat.failed_syncs} failed)</span>}
                           </li>
                         ))}
                       </ul>
                     </div>
                   )}
-                </div>
-              </div>
+                </AlertDescription>
+              </Alert>
             )}
 
             {/* Jotform */}
             <div className="space-y-4">
-              <h4 className="font-medium text-gray-900">Jotform API</h4>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  API Key {storedConfig?.configured && <span className="text-green-600 text-xs">(configured)</span>}
-                </label>
+              <h4 className="font-semibold">Jotform API</h4>
+              <div className="space-y-2">
+                <Label htmlFor="jotform-key">
+                  API Key {storedConfig?.configured && <span className="text-green-600 text-xs ml-2">(configured)</span>}
+                </Label>
                 <Input
+                  id="jotform-key"
                   type="password"
                   placeholder={storedConfig?.configured ? "••••••••••••••••••••••••" : "Enter your Jotform API key"}
                   value={apiKeys.jotform}
@@ -574,7 +541,7 @@ function ApiConfigContent() {
                   autoComplete="off"
                   data-form-type="other"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-muted-foreground">
                   {storedConfig?.configured
                     ? 'Leave empty to keep existing key, or enter a new one to update'
                     : 'Get your API key from Jotform → Settings → API'
@@ -583,14 +550,17 @@ function ApiConfigContent() {
               </div>
             </div>
 
+            <Separator />
+
             {/* Givebutter */}
             <div className="space-y-4">
-              <h4 className="font-medium text-gray-900">Givebutter API</h4>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  API Key {storedConfig?.configured && <span className="text-green-600 text-xs">(configured)</span>}
-                </label>
+              <h4 className="font-semibold">Givebutter API</h4>
+              <div className="space-y-2">
+                <Label htmlFor="givebutter-key">
+                  API Key {storedConfig?.configured && <span className="text-green-600 text-xs ml-2">(configured)</span>}
+                </Label>
                 <Input
+                  id="givebutter-key"
                   type="password"
                   placeholder={storedConfig?.configured ? "••••••••••••••••••••••••" : "Enter your Givebutter API key"}
                   value={apiKeys.givebutter}
@@ -598,7 +568,7 @@ function ApiConfigContent() {
                   autoComplete="off"
                   data-form-type="other"
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-muted-foreground">
                   {storedConfig?.configured
                     ? 'Leave empty to keep existing key, or enter a new one to update'
                     : 'Get your API key from Givebutter → Settings → API'
@@ -607,8 +577,10 @@ function ApiConfigContent() {
               </div>
             </div>
 
+            <Separator />
+
             {/* Action Buttons */}
-            <div className="pt-4 border-t border-gray-200 space-y-3">
+            <div className="space-y-3">
               <Button
                 onClick={handleTestApis}
                 disabled={testingApis || (!apiKeys.jotform && !storedConfig?.configured) || (!apiKeys.givebutter && !storedConfig?.configured)}
@@ -616,9 +588,9 @@ function ApiConfigContent() {
                 size="lg"
                 className="w-full"
               >
-                {testingApis ? 'Testing...' : 'Test APIs'}
+                {testingApis ? 'Testing...' : 'Test API Connections'}
               </Button>
-              <p className="text-xs text-gray-500 text-center">
+              <p className="text-xs text-muted-foreground text-center">
                 {storedConfig?.configured
                   ? 'Test with stored keys or enter new ones'
                   : 'Test your API keys first, then select forms in the next step'
@@ -628,11 +600,12 @@ function ApiConfigContent() {
 
             {/* API Status Results */}
             {(apiStatus.jotform !== null || apiStatus.givebutter !== null) && (
-              <div className="space-y-3 bg-gray-50 p-4 rounded-lg">
-                <h4 className="font-medium text-gray-900">Connection Status</h4>
-                <div className="space-y-2">
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Connection Status</AlertTitle>
+                <AlertDescription className="space-y-2">
                   {apiStatus.jotform !== null && (
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center gap-2">
                       <span className={`w-3 h-3 rounded-full ${apiStatus.jotform ? 'bg-green-500' : 'bg-red-500'}`} />
                       <span className="text-sm">
                         Jotform: {apiStatus.jotform ? 'Connected ✓' : 'Failed ✗'}
@@ -640,154 +613,152 @@ function ApiConfigContent() {
                     </div>
                   )}
                   {apiStatus.givebutter !== null && (
-                    <div className="flex items-center space-x-2">
+                    <div className="flex items-center gap-2">
                       <span className={`w-3 h-3 rounded-full ${apiStatus.givebutter ? 'bg-green-500' : 'bg-red-500'}`} />
                       <span className="text-sm">
                         Givebutter: {apiStatus.givebutter ? 'Connected ✓' : 'Failed ✗'}
                       </span>
                     </div>
                   )}
-                </div>
-                {apiStatus.jotform && apiStatus.givebutter && (
-                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-green-800 font-medium mb-3">
-                      ✓ All APIs connected successfully! You can now proceed to select forms.
-                    </p>
-                    <Button
-                      onClick={() => setActiveTab('forms')}
-                      className="w-full"
-                    >
-                      Continue to Select Forms →
-                    </Button>
-                  </div>
-                )}
-              </div>
+                  {apiStatus.jotform && apiStatus.givebutter && (
+                    <div className="mt-3">
+                      <p className="text-sm font-medium text-green-600 mb-2">
+                        All APIs connected successfully!
+                      </p>
+                      <Button
+                        onClick={() => setActiveTab('forms')}
+                        className="w-full"
+                        size="sm"
+                      >
+                        Continue to Select Forms →
+                      </Button>
+                    </div>
+                  )}
+                </AlertDescription>
+              </Alert>
             )}
-          </div>
-        )}
+          </TabsContent>
 
-        {/* Forms Tab */}
-        {activeTab === 'forms' && (
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Select Forms & Campaigns</h3>
-              <p className="text-gray-600 mb-6">Choose which forms and campaigns to sync</p>
-            </div>
+          <TabsContent value="forms" className="space-y-6">
 
             {/* Jotform Forms */}
             <div className="space-y-4">
-              <h4 className="font-medium text-gray-900">Jotform Forms</h4>
-              <div className="space-y-3">
-                <Button
-                  onClick={handleDiscoverJotform}
-                  disabled={discoveringJotform || jotformForms.length > 0}
-                  variant="outline"
-                  className="w-full"
-                >
-                  {discoveringJotform ? 'Loading Forms...' : jotformForms.length > 0 ? `✓ Loaded ${jotformForms.length} Forms` : 'Discover Available Forms'}
-                </Button>
+              <h4 className="font-semibold">Jotform Forms</h4>
+              <Button
+                onClick={handleDiscoverJotform}
+                disabled={discoveringJotform || jotformForms.length > 0}
+                variant="outline"
+                className="w-full"
+              >
+                {discoveringJotform ? 'Loading Forms...' : jotformForms.length > 0 ? `✓ Loaded ${jotformForms.length} Forms` : 'Discover Available Forms'}
+              </Button>
 
-                {jotformForms.length > 0 && (
-                  <div className="grid grid-cols-2 gap-3 mt-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Signup Form
-                      </label>
-                      <select
-                        value={apiKeys.jotformSignupForm}
-                        onChange={e => setApiKeys({ ...apiKeys, jotformSignupForm: e.target.value })}
-                        className="w-full px-3 py-2.5 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                      >
-                        <option value="">Select a form...</option>
-                        {jotformForms.map(form => (
-                          <option key={form.id} value={form.id}>
-                            {form.title} ({form.count} submissions)
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Setup Form
-                      </label>
-                      <select
-                        value={apiKeys.jotformSetupForm}
-                        onChange={e => setApiKeys({ ...apiKeys, jotformSetupForm: e.target.value })}
-                        className="w-full px-3 py-2.5 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                      >
-                        <option value="">Select a form...</option>
-                        {jotformForms.map(form => (
-                          <option key={form.id} value={form.id}>
-                            {form.title} ({form.count} submissions)
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Givebutter Campaigns */}
-            <div className="space-y-4">
-              <h4 className="font-medium text-gray-900">Givebutter Campaign</h4>
-              <div className="space-y-3">
-                <Button
-                  onClick={handleDiscoverGivebutter}
-                  disabled={discoveringGivebutter || givebutterCampaigns.length > 0}
-                  variant="outline"
-                  className="w-full"
-                >
-                  {discoveringGivebutter ? 'Loading Campaigns...' : givebutterCampaigns.length > 0 ? `✓ Loaded ${givebutterCampaigns.length} Campaigns` : 'Discover Available Campaigns'}
-                </Button>
-
-                {givebutterCampaigns.length > 0 && (
-                  <div className="mt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Campaign
-                    </label>
+              {jotformForms.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-form">Signup Form</Label>
                     <select
-                      value={apiKeys.givebutterCampaign}
-                      onChange={e => setApiKeys({ ...apiKeys, givebutterCampaign: e.target.value })}
-                      className="w-full px-3 py-2.5 text-base border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                      id="signup-form"
+                      value={apiKeys.jotformSignupForm}
+                      onChange={e => setApiKeys({ ...apiKeys, jotformSignupForm: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring bg-background"
                     >
-                      <option value="">Select a campaign...</option>
-                      {givebutterCampaigns.map(campaign => (
-                        <option key={campaign.id} value={campaign.code}>
-                          {campaign.title} ({campaign.members_count} members)
+                      <option value="">Select a form...</option>
+                      {jotformForms.map(form => (
+                        <option key={form.id} value={form.id}>
+                          {form.title} ({form.count} submissions)
                         </option>
                       ))}
                     </select>
                   </div>
-                )}
-              </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="setup-form">Setup Form</Label>
+                    <select
+                      id="setup-form"
+                      value={apiKeys.jotformSetupForm}
+                      onChange={e => setApiKeys({ ...apiKeys, jotformSetupForm: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring bg-background"
+                    >
+                      <option value="">Select a form...</option>
+                      {jotformForms.map(form => (
+                        <option key={form.id} value={form.id}>
+                          {form.title} ({form.count} submissions)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="training-form">Training Signup Form</Label>
+                    <select
+                      id="training-form"
+                      value={apiKeys.jotformTrainingSignupForm}
+                      onChange={e => setApiKeys({ ...apiKeys, jotformTrainingSignupForm: e.target.value })}
+                      className="w-full px-3 py-2 text-sm border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring bg-background"
+                    >
+                      <option value="">Select a form...</option>
+                      {jotformForms.map(form => (
+                        <option key={form.id} value={form.id}>
+                          {form.title} ({form.count} submissions)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Separator />
+
+            {/* Givebutter Campaigns */}
+            <div className="space-y-4">
+              <h4 className="font-semibold">Givebutter Campaign</h4>
+              <Button
+                onClick={handleDiscoverGivebutter}
+                disabled={discoveringGivebutter || givebutterCampaigns.length > 0}
+                variant="outline"
+                className="w-full"
+              >
+                {discoveringGivebutter ? 'Loading Campaigns...' : givebutterCampaigns.length > 0 ? `✓ Loaded ${givebutterCampaigns.length} Campaigns` : 'Discover Available Campaigns'}
+              </Button>
+
+              {givebutterCampaigns.length > 0 && (
+                <div className="space-y-2">
+                  <Label htmlFor="campaign">Campaign</Label>
+                  <select
+                    id="campaign"
+                    value={apiKeys.givebutterCampaign}
+                    onChange={e => setApiKeys({ ...apiKeys, givebutterCampaign: e.target.value })}
+                    className="w-full px-3 py-2 text-sm border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring bg-background"
+                  >
+                    <option value="">Select a campaign...</option>
+                    {givebutterCampaigns.map(campaign => (
+                      <option key={campaign.id} value={campaign.code}>
+                        {campaign.title} ({campaign.members_count} members)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             {/* Continue Button */}
-            {apiKeys.jotformSignupForm && apiKeys.jotformSetupForm && apiKeys.givebutterCampaign && (
-              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-blue-800 font-medium mb-3">
-                  ✓ Forms and campaign selected! Proceed to upload CSV.
-                </p>
-                <Button onClick={() => setActiveTab('upload')} className="w-full">
-                  Continue to CSV Upload →
-                </Button>
-              </div>
+            {apiKeys.jotformSignupForm && apiKeys.jotformSetupForm && apiKeys.jotformTrainingSignupForm && apiKeys.givebutterCampaign && (
+              <Alert>
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertTitle>Forms Selected</AlertTitle>
+                <AlertDescription>
+                  <p className="mb-3">Forms and campaign selected! Proceed to upload CSV.</p>
+                  <Button onClick={() => setActiveTab('upload')} className="w-full" size="sm">
+                    Continue to CSV Upload →
+                  </Button>
+                </AlertDescription>
+              </Alert>
             )}
-          </div>
-        )}
+          </TabsContent>
 
-        {/* Upload Tab */}
-        {activeTab === 'upload' && (
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Upload CSV</h3>
-              <p className="text-gray-600 mb-6">
-                Upload the Givebutter contacts export CSV file to prepare for synchronization
-              </p>
-            </div>
+          <TabsContent value="upload" className="space-y-6">
 
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+            <div className="border-2 border-dashed border-border/40 rounded-lg p-8 text-center bg-muted/10">
               <input
                 type="file"
                 accept=".csv"
@@ -851,32 +822,27 @@ function ApiConfigContent() {
 
             {/* Success message with continue button */}
             {uploadStatus === 'success' && (
-              <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-green-800 font-medium mb-3">
-                  ✓ CSV file uploaded successfully! You can now proceed to run the sync.
-                </p>
-                <Button onClick={() => setActiveTab('sync')} className="w-full">
-                  Continue to Run Sync →
-                </Button>
-              </div>
+              <Alert>
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertTitle>Upload Successful</AlertTitle>
+                <AlertDescription>
+                  <p className="mb-3">CSV file uploaded successfully! You can now proceed to run the sync.</p>
+                  <Button onClick={() => setActiveTab('sync')} className="w-full" size="sm">
+                    Continue to Run Sync →
+                  </Button>
+                </AlertDescription>
+              </Alert>
             )}
-          </div>
-        )}
+          </TabsContent>
 
-        {/* Sync Tab */}
-        {activeTab === 'sync' && (
-          <div className="space-y-6">
-            <div>
-              <h3 className="text-lg font-semibold mb-4">Run Production Sync</h3>
-              <p className="text-gray-600 mb-6">
-                Execute the complete data synchronization process
-              </p>
-            </div>
+          <TabsContent value="sync" className="space-y-6">
 
             {/* Pre-sync Checklist */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <h4 className="font-medium text-blue-900 mb-2">Pre-sync Checklist</h4>
-              <ul className="space-y-1 text-sm text-blue-800">
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Pre-sync Checklist</AlertTitle>
+              <AlertDescription>
+              <ul className="space-y-1 text-sm mt-2">
                 <li className="flex items-center">
                   <span className={`mr-2 ${apiKeys.jotform ? 'text-green-600' : 'text-gray-400'}`}>
                     {apiKeys.jotform ? '✓' : '○'}
@@ -890,8 +856,8 @@ function ApiConfigContent() {
                   Givebutter API configured
                 </li>
                 <li className="flex items-center">
-                  <span className={`mr-2 ${apiKeys.jotformSignupForm && apiKeys.jotformSetupForm && apiKeys.givebutterCampaign ? 'text-green-600' : 'text-gray-400'}`}>
-                    {apiKeys.jotformSignupForm && apiKeys.jotformSetupForm && apiKeys.givebutterCampaign ? '✓' : '○'}
+                  <span className={`mr-2 ${apiKeys.jotformSignupForm && apiKeys.jotformSetupForm && apiKeys.jotformTrainingSignupForm && apiKeys.givebutterCampaign ? 'text-green-600' : 'text-gray-400'}`}>
+                    {apiKeys.jotformSignupForm && apiKeys.jotformSetupForm && apiKeys.jotformTrainingSignupForm && apiKeys.givebutterCampaign ? '✓' : '○'}
                   </span>
                   Forms and campaigns selected
                 </li>
@@ -908,7 +874,8 @@ function ApiConfigContent() {
                   Configuration saved
                 </li>
               </ul>
-            </div>
+              </AlertDescription>
+            </Alert>
 
             {/* Action Buttons */}
             <div className="grid grid-cols-2 gap-3">
@@ -919,6 +886,7 @@ function ApiConfigContent() {
                   (!apiKeys.givebutter && !storedConfig?.configured) ||
                   !apiKeys.jotformSignupForm ||
                   !apiKeys.jotformSetupForm ||
+                  !apiKeys.jotformTrainingSignupForm ||
                   !apiKeys.givebutterCampaign ||
                   savingConfig
                 }
@@ -970,44 +938,20 @@ function ApiConfigContent() {
                 <p>This will synchronize all data from your configured sources</p>
               </div>
             )}
-          </div>
-        )}
-      </div>
+          </TabsContent>
+        </Tabs>
+      </CardContent>
+    </Card>
 
-      {/* TODO: Implementation Notes for API Configuration */}
-      {/*
-      Current Implementation Status:
-      - UI structure is complete and functional
-      - Form handling and state management works
-      - Tab navigation is smooth and intuitive
-      - File upload interface is ready
-
-      Backend Integration Needed:
-      1. API key validation endpoints
-      2. Jotform API integration for form discovery
-      3. Givebutter API integration for campaign discovery
-      4. CSV file processing and validation
-      5. Sync execution with progress tracking
-      6. Database storage for configuration
-      7. Error handling and logging
-
-      Future Enhancements:
-      1. Real-time progress tracking with WebSocket updates
-      2. Automated sync scheduling
-      3. Data validation and quality checks
-      4. Backup and restore functionality
-      5. Multi-environment configuration
-      */}
-
-      {/* Dialog */}
-      <Dialog
-        isOpen={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        title={dialogTitle}
-        variant={dialogVariant}
-      >
-        {dialogMessage}
-      </Dialog>
-    </div>
+    {/* Dialog */}
+    <Dialog
+      isOpen={dialogOpen}
+      onClose={() => setDialogOpen(false)}
+      title={dialogTitle}
+      variant={dialogVariant}
+    >
+      {dialogMessage}
+    </Dialog>
+    </>
   );
 }

@@ -7,9 +7,9 @@
  * Flow:
  * 1. Fetch Jotform signups → raw_mn_signups
  * 2. Fetch Jotform setup → raw_mn_funds_setup
- * 3. Fetch GB campaign members → raw_gb_campaign_members
- * 4. Run ETL → mentors (single source of truth)
- * 5. Sync GB contacts via API (tag-based: "Mentors 2025")
+ * 3. Fetch Jotform training signup → raw_mn_training_signup
+ * 4. Fetch GB campaign members → raw_gb_campaign_members
+ * 5. Run ETL → mentors (single source of truth)
  *
  * Usage:
  *   npm run sync                   (periodic sync)
@@ -172,9 +172,9 @@ export class SyncOrchestrator {
    * Flow:
    * 1. Fetch Jotform signups → raw tables
    * 2. Fetch Jotform setup → raw tables
-   * 3. Fetch Givebutter members → raw tables
-   * 4. Run ETL → mentors, mn_errors, mn_gb_import
-   * 5. Sync Givebutter contacts via API (tag-based: "Mentors 2025")
+   * 3. Fetch Jotform training signup → raw tables
+   * 4. Fetch Givebutter members → raw tables
+   * 5. Run ETL → mentors, mn_errors, mn_gb_import
    */
   async runPeriodicSync(triggeredBy: string = 'manual'): Promise<void> {
     console.log('\n' + '='.repeat(80));
@@ -192,9 +192,9 @@ export class SyncOrchestrator {
     const steps = [
       { name: '1. Jotform Signups', command: 'npm run sync:jotform-signups' },
       { name: '2. Jotform Setup', command: 'npm run sync:jotform-setup' },
-      { name: '3. Givebutter Members', command: 'npm run sync:givebutter-members' },
-      { name: '4. ETL Process', command: 'npm run etl' },
-      { name: '5. API Contact Sync', command: 'npm run sync:api-contacts' },
+      { name: '3. Jotform Training Signup', command: 'npm run sync:jotform-training-signup' },
+      { name: '4. Givebutter Members', command: 'npm run sync:givebutter-members' },
+      { name: '5. ETL Process', command: 'npm run etl' },
     ];
 
     let failed = false;

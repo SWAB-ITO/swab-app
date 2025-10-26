@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  jotform-mcp:
+    build:
+      context: ../..
+      dockerfile: backend/mcp/Dockerfile
+    image: mentor-database-jotform-mcp:latest
+    container_name: jotform-mcp-server
+    environment:
+      - JOTFORM_API_KEY=${JOTFORM_API_KEY}
+      - NODE_ENV=production
+    restart: unless-stopped
+    # Keep stdin open for MCP stdio communication
+    stdin_open: true
+    tty: true
+    command: ["node", "build/mcp/jotform/server.js"]
+
+  givebutter-mcp:
+    build:
+      context: ../..
+      dockerfile: backend/mcp/Dockerfile
+    image: mentor-database-givebutter-mcp:latest
+    container_name: givebutter-mcp-server
+    environment:
+      - GIVEBUTTER_API_KEY=${GIVEBUTTER_API_KEY}
+      - NODE_ENV=production
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    command: ["node", "build/mcp/givebutter/server.js"]

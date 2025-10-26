@@ -3,8 +3,10 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Settings, Upload, RefreshCw, Play, AlertCircle, CheckCircle, Clock, FileText, Database } from 'lucide-react';
 
 interface InitStatus {
@@ -220,83 +222,93 @@ export default function SyncDashboard() {
   };
 
   return (
-    <div className="p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">Sync Dashboard</h1>
-              <p className="text-gray-600">Monitor and manage data synchronization</p>
-            </div>
-            <Link href="/settings?tab=api-config">
-              <Button variant="outline" className="flex items-center gap-2">
-                <Settings className="h-4 w-4" />
-                Settings
-              </Button>
-            </Link>
+    <div className="container mx-auto p-6 max-w-7xl">
+      {/* Header */}
+      <div className="mb-8">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold tracking-tight mb-2">Sync Dashboard</h1>
+            <p className="text-muted-foreground text-lg">Monitor and manage data synchronization</p>
           </div>
+          <Link href="/settings?tab=api-config">
+            <Button variant="outline" className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              Settings
+            </Button>
+          </Link>
         </div>
+      </div>
+
+      <Separator className="mb-8" />
 
         {/* Status Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card className="p-6">
-            <div className="flex items-center gap-3 mb-2">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">System Status</CardTitle>
               {initStatus?.initialized ? (
-                <CheckCircle className="h-5 w-5 text-green-600" />
+                <CheckCircle className="h-4 w-4 text-green-600" />
               ) : (
-                <AlertCircle className="h-5 w-5 text-yellow-600" />
+                <AlertCircle className="h-4 w-4 text-yellow-600" />
               )}
-              <h3 className="font-medium text-gray-900">System Status</h3>
-            </div>
-            <p className="text-2xl font-bold text-gray-900">
-              {initStatus?.initialized ? 'Initialized' : 'Not Configured'}
-            </p>
-            {initStatus?.configuredAt && (
-              <p className="text-xs text-gray-500 mt-1">
-                Configured: {new Date(initStatus.configuredAt).toLocaleDateString()}
-              </p>
-            )}
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {initStatus?.initialized ? 'Initialized' : 'Not Configured'}
+              </div>
+              {initStatus?.configuredAt && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Configured: {new Date(initStatus.configuredAt).toLocaleDateString()}
+                </p>
+              )}
+            </CardContent>
           </Card>
 
-          <Card className="p-6">
-            <div className="flex items-center gap-3 mb-2">
-              <Clock className="h-5 w-5 text-blue-600" />
-              <h3 className="font-medium text-gray-900">Last Sync</h3>
-            </div>
-            <p className="text-2xl font-bold text-gray-900">
-              {initStatus?.lastSyncAt
-                ? new Date(initStatus.lastSyncAt).toLocaleDateString()
-                : 'Never'}
-            </p>
-            {initStatus?.lastSyncAt && (
-              <p className="text-xs text-gray-500 mt-1">
-                {new Date(initStatus.lastSyncAt).toLocaleTimeString()}
-              </p>
-            )}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Last Sync</CardTitle>
+              <Clock className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {initStatus?.lastSyncAt
+                  ? new Date(initStatus.lastSyncAt).toLocaleDateString()
+                  : 'Never'}
+              </div>
+              {initStatus?.lastSyncAt && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {new Date(initStatus.lastSyncAt).toLocaleTimeString()}
+                </p>
+              )}
+            </CardContent>
           </Card>
 
-          <Card className="p-6">
-            <div className="flex items-center gap-3 mb-2">
-              <AlertCircle className="h-5 w-5 text-orange-600" />
-              <h3 className="font-medium text-gray-900">Active Errors</h3>
-            </div>
-            <p className="text-2xl font-bold text-gray-900">{errors.length}</p>
-            <p className="text-xs text-gray-500 mt-1">Unresolved issues</p>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Active Errors</CardTitle>
+              <AlertCircle className="h-4 w-4 text-orange-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{errors.length}</div>
+              <p className="text-xs text-muted-foreground mt-1">Unresolved issues</p>
+            </CardContent>
           </Card>
         </div>
 
         {/* Action Buttons */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           {/* Periodic Sync */}
-          <Card className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <RefreshCw className="h-5 w-5 text-blue-600" />
-              <h3 className="text-lg font-medium text-gray-900">Periodic Sync (Tier 2)</h3>
-            </div>
-            <p className="text-gray-600 mb-4 text-sm">
-              Sync from APIs: Jotform signups/setup + Givebutter members + ETL + API contact sync
-            </p>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <RefreshCw className="h-5 w-5" />
+                Periodic Sync (Tier 2)
+              </CardTitle>
+              <CardDescription>
+                Sync from APIs: Jotform signups/setup + Givebutter members + ETL + API contact sync
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
             <Button
               onClick={handlePeriodicSync}
               disabled={!initStatus?.initialized || syncRunning}
@@ -315,26 +327,30 @@ export default function SyncDashboard() {
               )}
             </Button>
 
-            {syncOutput.length > 0 && (
-              <div className="mt-4 p-3 bg-gray-50 rounded-lg max-h-64 overflow-y-auto font-mono text-xs">
-                {syncOutput.map((line, i) => (
-                  <div key={i} className="whitespace-pre-wrap">{line}</div>
-                ))}
-              </div>
-            )}
+              {syncOutput.length > 0 && (
+                <div className="p-3 bg-muted rounded-lg max-h-64 overflow-y-auto font-mono text-xs">
+                  {syncOutput.map((line, i) => (
+                    <div key={i} className="whitespace-pre-wrap">{line}</div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
           </Card>
 
           {/* CSV Upload */}
-          <Card className="p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <Upload className="h-5 w-5 text-green-600" />
-              <h3 className="text-lg font-medium text-gray-900">CSV Upload (Tier 3)</h3>
-            </div>
-            <p className="text-gray-600 mb-4 text-sm">
-              Upload Givebutter full export → match contacts → capture contact_ids
-            </p>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="h-5 w-5" />
+                CSV Upload (Tier 3)
+              </CardTitle>
+              <CardDescription>
+                Upload Givebutter full export → match contacts → capture contact_ids
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
 
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+            <div className="border-2 border-dashed border-border/40 rounded-lg p-6 text-center bg-muted/10">
               <input
                 type="file"
                 accept=".csv"
@@ -355,29 +371,32 @@ export default function SyncDashboard() {
               </label>
             </div>
 
-            {uploadOutput.length > 0 && (
-              <div className="mt-4 p-3 bg-gray-50 rounded-lg max-h-64 overflow-y-auto font-mono text-xs">
-                {uploadOutput.map((line, i) => (
-                  <div key={i} className="whitespace-pre-wrap">{line}</div>
-                ))}
-              </div>
-            )}
+              {uploadOutput.length > 0 && (
+                <div className="p-3 bg-muted rounded-lg max-h-64 overflow-y-auto font-mono text-xs">
+                  {uploadOutput.map((line, i) => (
+                    <div key={i} className="whitespace-pre-wrap">{line}</div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
           </Card>
         </div>
 
         {/* Recent Sync Logs */}
-        <Card className="p-6 mb-8">
-          <div className="flex items-center gap-3 mb-4">
-            <Database className="h-5 w-5 text-purple-600" />
-            <h3 className="text-lg font-medium text-gray-900">Recent Sync Operations</h3>
-          </div>
-
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5" />
+              Recent Sync Operations
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
           {syncLogs.filter(log => log.sync_type !== 'automated').length === 0 ? (
-            <p className="text-gray-500 text-sm">No sync operations yet</p>
+            <p className="text-muted-foreground text-sm">No sync operations yet</p>
           ) : (
             <div className="space-y-3">
               {syncLogs.filter(log => log.sync_type !== 'automated').map((log) => (
-                <div key={log.id} className="border border-gray-200 rounded-lg p-4">
+                <div key={log.id} className="bg-muted/30 rounded-lg p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div>
                       <div className="flex items-center gap-2 mb-1">
@@ -415,21 +434,24 @@ export default function SyncDashboard() {
               ))}
             </div>
           )}
+          </CardContent>
         </Card>
 
         {/* Errors and Conflicts */}
-        <Card className="p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <FileText className="h-5 w-5 text-orange-600" />
-            <h3 className="text-lg font-medium text-gray-900">Errors & Conflicts</h3>
-          </div>
-
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Errors & Conflicts
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
           {errors.length === 0 ? (
-            <p className="text-gray-500 text-sm">No unresolved errors</p>
+            <p className="text-muted-foreground text-sm">No unresolved errors</p>
           ) : (
             <div className="space-y-3">
               {errors.map((error, index) => (
-                <div key={error.error_id || `error-${index}`} className="border border-gray-200 rounded-lg p-4">
+                <div key={error.error_id || `error-${index}`} className="bg-muted/30 rounded-lg p-4">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
@@ -449,8 +471,8 @@ export default function SyncDashboard() {
               ))}
             </div>
           )}
+          </CardContent>
         </Card>
-      </div>
     </div>
   );
 }

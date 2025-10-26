@@ -102,7 +102,6 @@ export type Database = {
           signup_at: string | null
           signup_submission_id: string | null
           status_category: string | null
-          status_text: string | null
           training_at: string | null
           training_done: boolean | null
           uga_class: string | null
@@ -134,7 +133,6 @@ export type Database = {
           signup_at?: string | null
           signup_submission_id?: string | null
           status_category?: string | null
-          status_text?: string | null
           training_at?: string | null
           training_done?: boolean | null
           uga_class?: string | null
@@ -166,7 +164,6 @@ export type Database = {
           signup_at?: string | null
           signup_submission_id?: string | null
           status_category?: string | null
-          status_text?: string | null
           training_at?: string | null
           training_done?: boolean | null
           uga_class?: string | null
@@ -234,13 +231,15 @@ export type Database = {
       }
       mn_gb_import: {
         Row: {
+          "✅ Mentor Training Signed Up?": string | null
           "👯‍♂️ Partner Preference": string | null
+          "💰 Amount Fundraised": string | null
           "💸 Givebutter Page Setup": string | null
           "📆 Shift Preference": string | null
-          "📈 Fully Fundraised?": string | null
-          "📝 Sign Up Complete": string | null
+          "📈 Fully Fundraised": string | null
           "📧 Custom Email Message 1️⃣": string | null
           "📱Custom Text Message 1️⃣": string | null
+          "📱Custom Text Message 2️⃣": string | null
           "🚂 Mentor Training Complete": string | null
           "Address Subscription Status": string | null
           "Contact External ID": string | null
@@ -271,13 +270,15 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          "✅ Mentor Training Signed Up?"?: string | null
           "👯‍♂️ Partner Preference"?: string | null
+          "💰 Amount Fundraised"?: string | null
           "💸 Givebutter Page Setup"?: string | null
           "📆 Shift Preference"?: string | null
-          "📈 Fully Fundraised?"?: string | null
-          "📝 Sign Up Complete"?: string | null
+          "📈 Fully Fundraised"?: string | null
           "📧 Custom Email Message 1️⃣"?: string | null
           "📱Custom Text Message 1️⃣"?: string | null
+          "📱Custom Text Message 2️⃣"?: string | null
           "🚂 Mentor Training Complete"?: string | null
           "Address Subscription Status"?: string | null
           "Contact External ID"?: string | null
@@ -308,13 +309,15 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          "✅ Mentor Training Signed Up?"?: string | null
           "👯‍♂️ Partner Preference"?: string | null
+          "💰 Amount Fundraised"?: string | null
           "💸 Givebutter Page Setup"?: string | null
           "📆 Shift Preference"?: string | null
-          "📈 Fully Fundraised?"?: string | null
-          "📝 Sign Up Complete"?: string | null
+          "📈 Fully Fundraised"?: string | null
           "📧 Custom Email Message 1️⃣"?: string | null
           "📱Custom Text Message 1️⃣"?: string | null
+          "📱Custom Text Message 2️⃣"?: string | null
           "🚂 Mentor Training Complete"?: string | null
           "Address Subscription Status"?: string | null
           "Contact External ID"?: string | null
@@ -777,7 +780,7 @@ export type Database = {
     }
     Functions: {
       get_sync_stats: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           avg_duration_seconds: number
           failed_syncs: number
@@ -786,18 +789,9 @@ export type Database = {
           total_syncs: number
         }[]
       }
-      link_campaign_members_to_mentors: {
-        Args: Record<PropertyKey, never>
-        Returns: number
-      }
-      normalize_email: {
-        Args: { email: string }
-        Returns: string
-      }
-      normalize_phone: {
-        Args: { phone: string }
-        Returns: string
-      }
+      link_campaign_members_to_mentors: { Args: never; Returns: number }
+      normalize_email: { Args: { email: string }; Returns: string }
+      normalize_phone: { Args: { phone: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never

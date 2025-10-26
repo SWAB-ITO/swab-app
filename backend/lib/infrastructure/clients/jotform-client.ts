@@ -120,6 +120,36 @@ export class JotformClient extends HttpClient {
   }
 
   /**
+   * Create a new form
+   */
+  async createForm(properties: {
+    title: string;
+    questions?: any[];
+    properties?: Record<string, any>;
+  }): Promise<JotformForm> {
+    const form = await this.post('/user/forms', properties);
+    this.logger?.info(`Created form: ${properties.title} (ID: ${form.id})`);
+    return form;
+  }
+
+  /**
+   * Update form properties
+   */
+  async updateForm(formId: string, properties: Record<string, any>): Promise<JotformForm> {
+    const form = await this.post(`/form/${formId}/properties`, properties);
+    this.logger?.info(`Updated form ${formId}`);
+    return form;
+  }
+
+  /**
+   * Delete a form
+   */
+  async deleteForm(formId: string): Promise<void> {
+    await this.delete(`/form/${formId}`);
+    this.logger?.info(`Deleted form ${formId}`);
+  }
+
+  /**
    * Get all submissions for a form
    *
    * @param formId - The form ID
@@ -199,6 +229,38 @@ export class JotformClient extends HttpClient {
   }
 
   /**
+   * Create a new submission
+   */
+  async createSubmission(
+    formId: string,
+    submission: Record<string, any>
+  ): Promise<JotformSubmission> {
+    const result = await this.post(`/form/${formId}/submissions`, { submission });
+    this.logger?.info(`Created submission for form ${formId}`);
+    return result;
+  }
+
+  /**
+   * Update an existing submission
+   */
+  async updateSubmission(
+    submissionId: string,
+    submission: Record<string, any>
+  ): Promise<JotformSubmission> {
+    const result = await this.post(`/submission/${submissionId}`, { submission });
+    this.logger?.info(`Updated submission ${submissionId}`);
+    return result;
+  }
+
+  /**
+   * Delete a submission
+   */
+  async deleteSubmission(submissionId: string): Promise<void> {
+    await this.delete(`/submission/${submissionId}`);
+    this.logger?.info(`Deleted submission ${submissionId}`);
+  }
+
+  /**
    * Get form properties
    */
   async getFormProperties(formId: string): Promise<any> {
@@ -210,6 +272,30 @@ export class JotformClient extends HttpClient {
    */
   async getFormReports(formId: string): Promise<any> {
     return this.get(`/form/${formId}/reports`);
+  }
+
+  /**
+   * Get form webhooks
+   */
+  async getFormWebhooks(formId: string): Promise<any> {
+    return this.get(`/form/${formId}/webhooks`);
+  }
+
+  /**
+   * Create a webhook for a form
+   */
+  async createWebhook(formId: string, webhookURL: string): Promise<any> {
+    const result = await this.post(`/form/${formId}/webhooks`, { webhookURL });
+    this.logger?.info(`Created webhook for form ${formId}: ${webhookURL}`);
+    return result;
+  }
+
+  /**
+   * Delete a webhook from a form
+   */
+  async deleteWebhook(formId: string, webhookId: string): Promise<void> {
+    await this.delete(`/form/${formId}/webhooks/${webhookId}`);
+    this.logger?.info(`Deleted webhook ${webhookId} from form ${formId}`);
   }
 
   /**

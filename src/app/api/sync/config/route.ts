@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
       givebutterApiKey,
       jotformSignupFormId,
       jotformSetupFormId,
+      jotformTrainingSignupFormId,
       givebutterCampaignCode,
     } = body;
 
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
     if (!jotformApiKey || !givebutterApiKey || !jotformSignupFormId ||
         !jotformSetupFormId || !givebutterCampaignCode) {
       return NextResponse.json(
-        { error: 'All fields are required' },
+        { error: 'Required fields: API keys, signup form, setup form, and campaign code' },
         { status: 400 }
       );
     }
@@ -80,6 +81,7 @@ export async function POST(request: NextRequest) {
         givebutter_api_key: givebutterApiKey,
         jotform_signup_form_id: jotformSignupFormId,
         jotform_setup_form_id: jotformSetupFormId,
+        jotform_training_signup_form_id: jotformTrainingSignupFormId || null,
         givebutter_campaign_code: givebutterCampaignCode,
         configured_by: 'web_ui',
         configured_at: new Date().toISOString(),

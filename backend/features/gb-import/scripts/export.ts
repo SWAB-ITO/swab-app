@@ -102,14 +102,16 @@ async function exportGivebutterImport() {
         'Email Subscription Status',
         'Phone Subscription Status',
         'Address Subscription Status',
-        '📝 Sign Up Complete',
         '💸 Givebutter Page Setup',
         '📆 Shift Preference',
         '👯‍♂️ Partner Preference',
         '🚂 Mentor Training Complete',
-        '📈 Fully Fundraised?',
+        '✅ Mentor Training Signed Up?',
+        '📈 Fully Fundraised',
+        '📱Custom Text Message 1️⃣',
         '📧 Custom Email Message 1️⃣',
-        '📱Custom Text Message 1️⃣'
+        '💰 Amount Fundraised',
+        '📱Custom Text Message 2️⃣'
       ]
     });
 
@@ -152,14 +154,16 @@ async function exportGivebutterImport() {
         'Email Subscription Status': record['Email Subscription Status'] || 'yes',
         'Phone Subscription Status': record['Phone Subscription Status'] || 'yes',
         'Address Subscription Status': record['Address Subscription Status'] || 'yes',
-        '📝 Sign Up Complete': record['📝 Sign Up Complete'] || '',
         '💸 Givebutter Page Setup': record['💸 Givebutter Page Setup'] || '',
         '📆 Shift Preference': record['📆 Shift Preference'] || '',
         '👯‍♂️ Partner Preference': record['👯‍♂️ Partner Preference'] || '',
         '🚂 Mentor Training Complete': record['🚂 Mentor Training Complete'] || '',
-        '📈 Fully Fundraised?': record['📈 Fully Fundraised?'] || '',
+        '✅ Mentor Training Signed Up?': record['✅ Mentor Training Signed Up?'] || '',
+        '📈 Fully Fundraised': record['📈 Fully Fundraised'] || '',
+        '📱Custom Text Message 1️⃣': record['📱Custom Text Message 1️⃣'] || '',
         '📧 Custom Email Message 1️⃣': record['📧 Custom Email Message 1️⃣'] || '',
-        '📱Custom Text Message 1️⃣': record['📱Custom Text Message 1️⃣'] || ''
+        '💰 Amount Fundraised': record['💰 Amount Fundraised'] || '',
+        '📱Custom Text Message 2️⃣': record['📱Custom Text Message 2️⃣'] || ''
       };
 
       stringifier.write(row);

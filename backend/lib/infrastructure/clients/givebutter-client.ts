@@ -105,6 +105,17 @@ export interface GivebutterTransaction {
   created_at: string;
 }
 
+export interface GivebutterTeam {
+  id: number;
+  name: string;
+  campaign_id: number;
+  raised: number;
+  goal: number;
+  members: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface GivebutterPaginatedResponse<T> {
   data: T[];
   meta: {
@@ -171,6 +182,56 @@ export class GivebutterClient extends HttpClient {
   }
 
   /**
+   * Create a new campaign
+   */
+  async createCampaign(data: {
+    code: string;
+    title: string;
+    description?: string;
+    goal?: number;
+    start_date?: string;
+    end_date?: string;
+  }): Promise<GivebutterCampaign> {
+    const response = await this.post<GivebutterResponse<GivebutterCampaign>>(
+      '/campaigns',
+      data
+    );
+    this.logger?.info(`Created campaign: ${response.data.title} (ID: ${response.data.id})`);
+    return response.data;
+  }
+
+  /**
+   * Update a campaign
+   */
+  async updateCampaign(
+    campaignId: number,
+    data: Partial<{
+      code: string;
+      title: string;
+      description: string;
+      goal: number;
+      start_date: string;
+      end_date: string;
+      status: string;
+    }>
+  ): Promise<GivebutterCampaign> {
+    const response = await this.patch<GivebutterResponse<GivebutterCampaign>>(
+      `/campaigns/${campaignId}`,
+      data
+    );
+    this.logger?.info(`Updated campaign ${campaignId}`);
+    return response.data;
+  }
+
+  /**
+   * Delete a campaign
+   */
+  async deleteCampaign(campaignId: number): Promise<void> {
+    await this.delete(`/campaigns/${campaignId}`);
+    this.logger?.info(`Deleted campaign ${campaignId}`);
+  }
+
+  /**
    * Get campaign members (single page)
    *
    * @param campaignId - The campaign ID
@@ -229,6 +290,30 @@ export class GivebutterClient extends HttpClient {
   }
 
   /**
+   * Delete a member (remove from campaign)
+   */
+  async deleteMember(memberId: number): Promise<void> {
+    await this.delete(`/members/${memberId}`);
+    this.logger?.info(`Deleted member ${memberId}`);
+  }
+
+  /**
+   * Get all teams
+   */
+  async getTeams(): Promise<GivebutterTeam[]> {
+    const response = await this.get<GivebutterResponse<GivebutterTeam[]>>('/teams');
+    return response.data;
+  }
+
+  /**
+   * Get a specific team by ID
+   */
+  async getTeam(teamId: number): Promise<GivebutterTeam> {
+    const response = await this.get<GivebutterResponse<GivebutterTeam>>(`/teams/${teamId}`);
+    return response.data;
+  }
+
+  /**
    * Get contacts (single page)
    *
    * @param page - Page number (default 1)
@@ -279,6 +364,61 @@ export class GivebutterClient extends HttpClient {
   async getContact(contactId: number): Promise<GivebutterContact> {
     // Single resource endpoints return the contact directly, not wrapped in { data: {...} }
     return this.get<GivebutterContact>(`/contacts/${contactId}`);
+  }
+
+  /**
+   * Create a new contact
+   */
+  async createContact(data: {
+    first_name: string;
+    last_name: string;
+    email: string;
+    phone?: string;
+    external_id?: string;
+    tags?: string[];
+    custom_fields?: Record<string, any>;
+    address?: {
+      line1?: string;
+      line2?: string;
+      city?: string;
+      state?: string;
+      zip?: string;
+      country?: string;
+    };
+  }): Promise<GivebutterContact> {
+    const response = await this.post<GivebutterResponse<GivebutterContact>>(
+      '/contacts',
+      data
+    );
+    this.logger?.info(`Created contact: ${response.data.first_name} ${response.data.last_name} (ID: ${response.data.id})`);
+    return response.data;
+  }
+
+  /**
+   * Update a contact
+   */
+  async updateContact(
+    contactId: number,
+    data: Partial<GivebutterContact>
+  ): Promise<GivebutterContact> {
+    const response = await this.patch<GivebutterResponse<GivebutterContact>>(
+      `/contacts/${contactId}`,
+      data
+    );
+    this.logger?.info(`Updated contact ${contactId}`);
+    return response.data;
+  }
+
+  /**
+   * Restore an archived contact
+   */
+  async restoreContact(contactId: number): Promise<GivebutterContact> {
+    const response = await this.patch<GivebutterResponse<GivebutterContact>>(
+      `/contacts/${contactId}/restore`,
+      {}
+    );
+    this.logger?.info(`Restored contact ${contactId}`);
+    return response.data;
   }
 
   /**

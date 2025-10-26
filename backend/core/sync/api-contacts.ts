@@ -238,14 +238,35 @@ async function syncGivebutterContactsById() {
     const batch = allContacts.slice(startIndex, endIndex);
 
     // Transform contacts to match database schema
-    const rows = batch.map(contact => ({
-      contact_id: contact.id,
-      external_id: contact.external_id,
-      prefix: contact.prefix,
-      first_name: contact.first_name,
-      middle_name: contact.middle_name,
-      last_name: contact.last_name,
-      suffix: contact.suffix,
+    const rows = batch
+      .filter(contact => {
+        // **FILTER: Only skip contacts WITHOUT an external_id**
+        // Contacts with external IDs (like MN0473) are valid mentors, even if they have
+        // temporary "junk" names like "F.25.6792" during Givebutter merge operations
+        const firstName = contact.first_name || '';
+        const lastName = contact.last_name || '';
+        const isJunkContact = /^F\.\d+\.\d+$/.test(firstName) && /^L\.\d+\.\d+$/.test(lastName);
+
+        // If it looks like junk BUT has an external_id, it's probably a merged contact - keep it!
+        if (isJunkContact && !contact.external_id) {
+          logger.warn(`Skipping junk contact ${contact.id}: ${firstName} ${lastName} (no external_id)`);
+          return false;
+        }
+
+        if (isJunkContact && contact.external_id) {
+          logger.info(`Keeping contact ${contact.id} (${contact.external_id}): ${firstName} ${lastName} - has external_id, likely merged contact`);
+        }
+
+        return true;
+      })
+      .map(contact => ({
+        contact_id: contact.id,
+        external_id: contact.external_id,
+        prefix: contact.prefix,
+        first_name: contact.first_name,
+        middle_name: contact.middle_name,
+        last_name: contact.last_name,
+        suffix: contact.suffix,
       date_of_birth: contact.date_of_birth,
       gender: contact.gender,
       employer: contact.employer,

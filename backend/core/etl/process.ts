@@ -40,12 +40,12 @@ function loadConfig<T>(filename: string, fallback: T): T {
 const customFieldsConfig = loadConfig('custom-fields.json', {
   year: new Date().getFullYear().toString(),
   fields: [
-    { id: 'signup_complete', name: '📝 Sign Up Complete', type: 'yes_no', source: 'mn_tasks.signup_done', mapping: { true: 'Yes', false: 'No' } },
-    { id: 'setup_complete', name: '💸 Givebutter Page Setup', type: 'yes_no', source: 'mn_tasks.setup_done', mapping: { true: 'Yes', false: 'No' } },
+    { id: 'setup_complete', name: '💸 Givebutter Page Setup', type: 'yes_no', source: 'mentors.setup_submission_id', mapping: { true: 'Yes', false: 'No' } },
     { id: 'shift_preference', name: '📆 Shift Preference', type: 'text', source: 'mentors.shift_preference' },
     { id: 'partner_preference', name: '👯‍♂️ Partner Preference', type: 'number', source: 'mentors.partner_preference' },
-    { id: 'training_complete', name: '🚂 Mentor Training Complete', type: 'yes_no', source: 'mn_tasks.training_done', mapping: { true: 'Yes', false: 'No' } },
-    { id: 'fully_fundraised', name: '📈 Fully Fundraised?', type: 'yes_no', source: 'mn_tasks.fundraised_done', mapping: { true: 'Yes', false: 'No' } },
+    { id: 'training_complete', name: '🚂 Mentor Training Complete', type: 'yes_no', source: 'mentors.training_done', mapping: { true: 'Yes', false: 'No' } },
+    { id: 'training_signup', name: '✅ Mentor Training Signed Up?', type: 'yes_no', source: 'mentors.training_signup_done', mapping: { true: 'Yes', false: 'No' } },
+    { id: 'fully_fundraised', name: '📈 Fully Fundraised', type: 'yes_no', source: 'mentors.fundraised_done', mapping: { true: 'Yes', false: 'No' } },
     { id: 'custom_text_message', name: '📱Custom Text Message 1️⃣', type: 'text', source: 'generated', max_length: 300 },
   ]
 });
@@ -118,11 +118,21 @@ interface RawSetup {
   submitted_at?: string;
 }
 
+interface RawTrainingSignup {
+  submission_id: string;
+  email?: string;
+  phone?: string;
+  session_date?: string;
+  session_time?: string;
+  submitted_at?: string;
+}
+
 interface RawMember {
   member_id: number;
   email: string;
   phone?: string;
   amount_raised: number;
+  url?: string;
 }
 
 interface RawContact {
@@ -140,6 +150,7 @@ interface Mentor {
   phone: string;
   gb_contact_id?: number;
   gb_member_id?: number;
+  fundraising_page_url?: string;
   first_name: string;
   middle_name?: string;
   last_name: string;
@@ -160,6 +171,9 @@ interface Mentor {
   fundraised_at?: string;
   training_done?: boolean;
   training_at?: string;
+  training_signup_done?: boolean;
+  training_signup_at?: string;
+  training_signup_submission_id?: string;
   status_category: string;
   signup_submission_id: string;
   setup_submission_id?: string;
@@ -472,6 +486,7 @@ function processMentorSignup(
     phoneToContact: Map<string, RawContact>;
     emailToContacts: Map<string, RawContact[]>;
     rawSetup: RawSetup[];
+    rawTrainingSignup: RawTrainingSignup[];
     rawMembers: RawMember[];
     existingContactIds: Map<string, number>;
     existingMemberIds: Map<string, number>;
@@ -506,77 +521,87 @@ function processMentorSignup(
   let gbMemberId: number | undefined;
   let hasDroppedTag = false;
 
-  // Try phone match
+  // Collect ALL contacts matching by phone OR email
+  const normPersonalEmail = normalizeEmail(signup.personal_email);
+  const normUgaEmail = normalizeEmail(signup.uga_email);
+
+  const matchingContacts: RawContact[] = [];
+
+  // Add phone match if found
   const contactByPhone = context.phoneToContact.get(normPhone);
   if (contactByPhone) {
-    gbContactId = contactByPhone.contact_id;
-    // Check for "Dropped 25" tag
-    hasDroppedTag = contactByPhone.tags?.includes('Dropped 25') || false;
-  } else {
-    // Try email match
-    const normPersonalEmail = normalizeEmail(signup.personal_email);
-    const normUgaEmail = normalizeEmail(signup.uga_email);
+    matchingContacts.push(contactByPhone);
+  }
 
-    let contactsByEmail: RawContact[] = [];
-    if (normPersonalEmail) {
-      contactsByEmail = context.emailToContacts.get(normPersonalEmail) || [];
-    }
-    if (contactsByEmail.length === 0 && normUgaEmail) {
-      contactsByEmail = context.emailToContacts.get(normUgaEmail) || [];
-    }
-
-    if (contactsByEmail.length > 0) {
-      // Smart matching when there are multiple contacts
-      // Priority:
-      // 1. Contact with matching External ID
-      // 2. Contact with phone number (junk duplicates have null phones)
-      // 3. Contact with real name (not auto-generated "F.XXXXX L.XXXXX")
-      // 4. Newest contact (highest ID)
-
-      const isJunkContact = (c: RawContact) => {
-        const firstName = c.first_name || '';
-        const lastName = c.last_name || '';
-        // Check for auto-generated pattern: "F.25.XXXXX L.25.XXXXX"
-        return /^F\.\d+\.\d+$/.test(firstName) && /^L\.\d+\.\d+$/.test(lastName);
-      };
-
-      contactsByEmail.sort((a, b) => {
-        // 1. Prefer contact with matching external_id
-        const aHasMatchingExternalId = a.external_id === signup.mn_id;
-        const bHasMatchingExternalId = b.external_id === signup.mn_id;
-        if (aHasMatchingExternalId && !bHasMatchingExternalId) return -1;
-        if (!aHasMatchingExternalId && bHasMatchingExternalId) return 1;
-
-        // 2. Prefer contact with phone number
-        const aHasPhone = !!a.primary_phone;
-        const bHasPhone = !!b.primary_phone;
-        if (aHasPhone && !bHasPhone) return -1;
-        if (!aHasPhone && bHasPhone) return 1;
-
-        // 3. Avoid junk/auto-generated contacts
-        const aIsJunk = isJunkContact(a);
-        const bIsJunk = isJunkContact(b);
-        if (!aIsJunk && bIsJunk) return -1;
-        if (aIsJunk && !bIsJunk) return 1;
-
-        // 4. Prefer newer contact (higher ID)
-        return b.contact_id - a.contact_id;
-      });
-
-      gbContactId = contactsByEmail[0].contact_id;
-      // Check for "Dropped 25" tag
-      hasDroppedTag = contactsByEmail[0].tags?.includes('Dropped 25') || false;
-
-      if (contactsByEmail.length > 1) {
-        errors.push({
-          mn_id: signup.mn_id,
-          error_type: 'multiple_contacts',
-          error_message: `Found ${contactsByEmail.length} Givebutter contacts for this email (selected ${gbContactId})`,
-          severity: 'warning',
-          source_table: 'raw_gb_full_contacts',
-          raw_data: { contacts: contactsByEmail.map(c => ({ id: c.contact_id, external_id: c.external_id, has_phone: !!c.primary_phone })) },
-        });
+  // Add all email matches (personal and UGA)
+  if (normPersonalEmail) {
+    const byPersonalEmail = context.emailToContacts.get(normPersonalEmail) || [];
+    byPersonalEmail.forEach(c => {
+      if (!matchingContacts.find(existing => existing.contact_id === c.contact_id)) {
+        matchingContacts.push(c);
       }
+    });
+  }
+  if (normUgaEmail) {
+    const byUgaEmail = context.emailToContacts.get(normUgaEmail) || [];
+    byUgaEmail.forEach(c => {
+      if (!matchingContacts.find(existing => existing.contact_id === c.contact_id)) {
+        matchingContacts.push(c);
+      }
+    });
+  }
+
+  if (matchingContacts.length > 0) {
+    // Smart matching when there are multiple contacts
+    // Priority:
+    // 1. Contact with matching External ID
+    // 2. Contact with phone number (junk duplicates have null phones)
+    // 3. Contact with real name (not auto-generated "F.XXXXX L.XXXXX")
+    // 4. Newest contact (highest ID)
+
+    const isJunkContact = (c: RawContact) => {
+      const firstName = c.first_name || '';
+      const lastName = c.last_name || '';
+      // Check for auto-generated pattern: "F.25.XXXXX L.25.XXXXX"
+      return /^F\.\d+\.\d+$/.test(firstName) && /^L\.\d+\.\d+$/.test(lastName);
+    };
+
+    matchingContacts.sort((a, b) => {
+      // 1. Prefer contact with matching external_id
+      const aHasMatchingExternalId = a.external_id === signup.mn_id;
+      const bHasMatchingExternalId = b.external_id === signup.mn_id;
+      if (aHasMatchingExternalId && !bHasMatchingExternalId) return -1;
+      if (!aHasMatchingExternalId && bHasMatchingExternalId) return 1;
+
+      // 2. Prefer contact with phone number
+      const aHasPhone = !!a.primary_phone;
+      const bHasPhone = !!b.primary_phone;
+      if (aHasPhone && !bHasPhone) return -1;
+      if (!aHasPhone && bHasPhone) return 1;
+
+      // 3. Avoid junk/auto-generated contacts
+      const aIsJunk = isJunkContact(a);
+      const bIsJunk = isJunkContact(b);
+      if (!aIsJunk && bIsJunk) return -1;
+      if (aIsJunk && !bIsJunk) return 1;
+
+      // 4. Prefer newer contact (higher ID)
+      return b.contact_id - a.contact_id;
+    });
+
+    gbContactId = matchingContacts[0].contact_id;
+    // Check for "Dropped 25" tag
+    hasDroppedTag = matchingContacts[0].tags?.includes('Dropped 25') || false;
+
+    if (matchingContacts.length > 1) {
+      errors.push({
+        mn_id: signup.mn_id,
+        error_type: 'multiple_contacts',
+        error_message: `Found ${matchingContacts.length} Givebutter contacts (phone/email) - selected ${gbContactId}`,
+        severity: 'warning',
+        source_table: 'raw_gb_full_contacts',
+        raw_data: { contacts: matchingContacts.map(c => ({ id: c.contact_id, external_id: c.external_id, has_phone: !!c.primary_phone, is_junk: isJunkContact(c) })) },
+      });
     }
   }
 
@@ -587,6 +612,21 @@ function processMentorSignup(
     const normUgaEmail = normalizeEmail(signup.uga_email);
     return (sPhone && sPhone === normPhone) || (sEmail && sEmail === normUgaEmail);
   });
+
+  // Match to training signup submission by PHONE ONLY (get most recent if multiple)
+  const trainingSignupMatches = context.rawTrainingSignup.filter(t => {
+    const tPhone = normalizePhone(t.phone);
+    return tPhone && tPhone === normPhone;
+  });
+
+  // Take the most recent submission if there are multiple
+  const trainingSignupMatch = trainingSignupMatches.length > 0
+    ? trainingSignupMatches.sort((a, b) => {
+        const dateA = a.submitted_at ? new Date(a.submitted_at).getTime() : 0;
+        const dateB = b.submitted_at ? new Date(b.submitted_at).getTime() : 0;
+        return dateB - dateA; // Most recent first
+      })[0]
+    : undefined;
 
   // Match to campaign member
   const memberMatch = context.rawMembers.find(m => {
@@ -639,6 +679,7 @@ function processMentorSignup(
     phone: normPhone,
     gb_contact_id: gbContactId || preservedContactId,
     gb_member_id: gbMemberId || preservedMemberId,
+    fundraising_page_url: memberMatch?.url,
     first_name: firstName,
     middle_name: middleName,
     last_name: lastName,
@@ -659,6 +700,9 @@ function processMentorSignup(
     fundraised_at: fundraisedDone ? signup.submitted_at : undefined,
     training_done: false,
     training_at: undefined,
+    training_signup_done: !!trainingSignupMatch,
+    training_signup_at: trainingSignupMatch?.submitted_at,
+    training_signup_submission_id: trainingSignupMatch?.submission_id,
     status_category: statusCategory,
     signup_submission_id: signup.submission_id,
     setup_submission_id: setupMatch?.submission_id,
@@ -690,10 +734,12 @@ async function etlProcess() {
   const [
     { data: rawSignups, error: signupsError },
     { data: rawSetup, error: setupError },
+    { data: rawTrainingSignup, error: trainingSignupError },
     { data: rawMembers, error: membersError },
   ] = await Promise.all([
     supabase.from('raw_mn_signups').select('*'),
     supabase.from('raw_mn_funds_setup').select('*'),
+    supabase.from('raw_mn_training_signup').select('*'),
     supabase.from('raw_gb_campaign_members').select('*').range(0, 10000),
   ]);
 
@@ -701,10 +747,11 @@ async function etlProcess() {
   const { contacts: rawContacts, error: contactsError } = await loadAllContacts(supabase);
   console.log(`   Loaded ${rawContacts.length} contacts (paginated)...\n`);
 
-  if (signupsError || setupError || membersError || contactsError) {
+  if (signupsError || setupError || trainingSignupError || membersError || contactsError) {
     console.error('❌ Error loading raw data');
     if (signupsError) console.error('Signups:', signupsError);
     if (setupError) console.error('Setup:', setupError);
+    if (trainingSignupError) console.error('Training Signup:', trainingSignupError);
     if (membersError) console.error('Members:', membersError);
     if (contactsError) console.error('Contacts:', contactsError);
     process.exit(1);
@@ -713,6 +760,7 @@ async function etlProcess() {
   console.log(`✅ Loaded:`);
   console.log(`   Signups: ${rawSignups?.length || 0}`);
   console.log(`   Setup: ${rawSetup?.length || 0}`);
+  console.log(`   Training Signup: ${rawTrainingSignup?.length || 0}`);
   console.log(`   Members: ${rawMembers?.length || 0}`);
   console.log(`   Contacts: ${rawContacts?.length || 0}\n`);
 
@@ -774,6 +822,7 @@ async function etlProcess() {
     phoneToContact,
     emailToContacts,
     rawSetup: rawSetup as RawSetup[] || [],
+    rawTrainingSignup: rawTrainingSignup as RawTrainingSignup[] || [],
     rawMembers: rawMembers as RawMember[] || [],
     existingContactIds,
     existingMemberIds,
@@ -800,6 +849,10 @@ async function etlProcess() {
   // Clear FK references in raw_gb_campaign_members first
   await supabase.from('raw_gb_campaign_members').update({ mn_id: null }).not('mn_id', 'is', null);
 
+  // Note: Dropped mentors (tagged "Dropped 25") are filtered during processing
+  // but NOT deleted from the database - we keep them for historical records.
+  // They won't appear in the export because they're not added to the mentors array.
+
   // UPSERT mentors (all data is now in one table)
   const mentorsResult = await supabase.from('mentors').upsert(mentors, { onConflict: 'mn_id' });
   if (mentorsResult.error) {
@@ -807,7 +860,27 @@ async function etlProcess() {
     process.exit(1);
   }
 
-  console.log(`✅ Inserted: ${mentors.length} mentors\n`);
+  console.log(`✅ Upserted: ${mentors.length} mentors\n`);
+
+  // Delete stale duplicate mentors ONLY (not dropped mentors - those are historical records)
+  // The deduplication process logs the discarded duplicate's mn_id in the error
+  const duplicateMentorIds = errors
+    .filter(e => e.error_type === 'duplicate_signup')
+    .map(e => e.mn_id)
+    .filter(id => id !== undefined);
+
+  if (duplicateMentorIds.length > 0) {
+    const { error: duplicateDeleteError } = await supabase
+      .from('mentors')
+      .delete()
+      .in('mn_id', duplicateMentorIds);
+
+    if (duplicateDeleteError) {
+      console.error('❌ Error deleting duplicate mentors:', duplicateDeleteError);
+    } else {
+      console.log(`🗑️  Deleted ${duplicateMentorIds.length} stale duplicate mentors\n`);
+    }
+  }
 
   // ============================================================================
   // STEP 6: Detect Givebutter duplicate contacts and log conflicts

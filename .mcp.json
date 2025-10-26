@@ -6,6 +6,26 @@
         "shadcn@latest",
         "mcp"
       ]
+    },
+    "jotform": {
+      "command": "docker",
+      "args": [
+        "exec",
+        "-i",
+        "jotform-mcp-server",
+        "node",
+        "build/mcp/jotform/server.js"
+      ]
+    },
+    "givebutter": {
+      "command": "docker",
+      "args": [
+        "exec",
+        "-i",
+        "givebutter-mcp-server",
+        "node",
+        "build/mcp/givebutter/server.js"
+      ]
     }
   }
 }

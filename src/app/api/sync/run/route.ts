@@ -18,16 +18,16 @@ const SYNC_STEPS = [
     script: 'backend/core/sync/jotform-setup.ts',
   },
   {
+    name: 'Jotform Training Signup',
+    script: 'backend/core/sync/jotform-training-signup.ts',
+  },
+  {
     name: 'Givebutter Members',
     script: 'backend/core/sync/givebutter-members.ts',
   },
   {
     name: 'ETL Process',
     script: 'backend/core/etl/process.ts',
-  },
-  {
-    name: 'API Contact Sync',
-    script: 'backend/core/sync/api-contacts.ts',
   },
 ];
 
@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
     givebutter_api_key: givebutterApiKey,
     jotform_signup_form_id: jotformSignupFormId,
     jotform_setup_form_id: jotformSetupFormId,
+    jotform_training_signup_form_id: jotformTrainingSignupFormId,
     givebutter_campaign_code: givebutterCampaignCode,
   } = config;
 
@@ -95,6 +96,7 @@ export async function POST(request: NextRequest) {
               JOTFORM_API_KEY: jotformApiKey,
               JOTFORM_SIGNUP_FORM_ID: jotformSignupFormId,
               JOTFORM_SETUP_FORM_ID: jotformSetupFormId,
+              JOTFORM_TRAINING_SIGNUP_FORM_ID: jotformTrainingSignupFormId || '252935716589069',
               GIVEBUTTER_API_KEY: givebutterApiKey,
               GIVEBUTTER_CAMPAIGN_ID: givebutterCampaignCode,
             }

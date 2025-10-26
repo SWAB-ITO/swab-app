@@ -155,6 +155,13 @@ export class HttpClient {
   }
 
   /**
+   * PATCH request
+   */
+  async patch<T = any>(endpoint: string, body: any, options: Omit<RequestOptions, 'method' | 'body'> = {}): Promise<T> {
+    return this.request<T>(endpoint, { ...options, method: 'PATCH', body });
+  }
+
+  /**
    * Build full URL
    */
   protected buildUrl(endpoint: string): string {

@@ -4,17 +4,6 @@
   "year": "2025",
   "fields": [
     {
-      "id": "signup_complete",
-      "name": "📝 Sign Up Complete",
-      "type": "yes_no",
-      "description": "Has the mentor completed their initial signup form?",
-      "source": "mentors.signup_at",
-      "mapping": {
-        "true": "Yes",
-        "false": "No"
-      }
-    },
-    {
       "id": "setup_complete",
       "name": "💸 Givebutter Page Setup",
       "type": "yes_no",
@@ -51,8 +40,19 @@
       }
     },
     {
+      "id": "training_signup",
+      "name": "✅ Mentor Training Signed Up?",
+      "type": "yes_no",
+      "description": "Has the mentor signed up for a training session?",
+      "source": "mentors.training_signup_done",
+      "mapping": {
+        "true": "Yes",
+        "false": "No"
+      }
+    },
+    {
       "id": "fully_fundraised",
-      "name": "📈 Fully Fundraised?",
+      "name": "📈 Fully Fundraised",
       "type": "yes_no",
       "description": "Has the mentor raised at least $75?",
       "source": "mentors.fundraised_done",
@@ -66,6 +66,29 @@
       "name": "📱Custom Text Message 1️⃣",
       "type": "text",
       "description": "Personalized text message based on mentor status",
+      "source": "generated",
+      "max_length": 300
+    },
+    {
+      "id": "custom_email_message",
+      "name": "📧 Custom Email Message 1️⃣",
+      "type": "text",
+      "description": "Personalized email message based on mentor status",
+      "source": "generated",
+      "max_length": 500
+    },
+    {
+      "id": "amount_fundraised",
+      "name": "💰 Amount Fundraised",
+      "type": "number",
+      "description": "Total amount raised by the mentor",
+      "source": "mentors.amount_raised"
+    },
+    {
+      "id": "custom_text_message_2",
+      "name": "📱Custom Text Message 2️⃣",
+      "type": "text",
+      "description": "Second personalized text message for campaigns",
       "source": "generated",
       "max_length": 300
     }

@@ -123,6 +123,8 @@ async function exportContacts(changedOnly: boolean = false, outputDir?: string) 
     '📈 Fully Fundraised?',
     '📧 Custom Email Message 1️⃣',
     '📱Custom Text Message 1️⃣',
+    '💰 Amount Fundraised',
+    '📱Custom Text Message 2️⃣',
   ];
 
   const csvLines: string[] = [];
@@ -188,6 +190,8 @@ async function exportContacts(changedOnly: boolean = false, outputDir?: string) 
       formatCSVValue(row['📈 Fully Fundraised?'] || 'No'),
       formatCSVValue(row['📧 Custom Email Message 1️⃣'] || ''),
       formatCSVValue(row['📱Custom Text Message 1️⃣'] || ''),
+      formatCSVValue(row['💰 Amount Fundraised'] || ''),
+      formatCSVValue(row['📱Custom Text Message 2️⃣'] || ''),
     ];
 
     csvLines.push(csvRow.join(','));
@@ -196,7 +200,7 @@ async function exportContacts(changedOnly: boolean = false, outputDir?: string) 
   // Write to file
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
   const filename = `givebutter-import-${timestamp}.csv`;
-  const directory = outputDir || 'backend/data';
+  const directory = outputDir || 'backend/features/comms/messages/mentor_trainings-10.22';
   const filepath = resolve(process.cwd(), directory, filename);
 
   writeFileSync(filepath, csvLines.join('\n'), 'utf-8');
