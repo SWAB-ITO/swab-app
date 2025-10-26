@@ -157,6 +157,41 @@
   .section-card {
     @apply bg-white rounded-lg border border-gray-200 p-6 mb-6;
   }
+
+  /* Typography Scale - Based on Design System */
+  /* Use these utilities for consistent typography throughout the app */
+
+  .text-display {
+    @apply text-4xl font-bold tracking-tight;
+  }
+
+  .text-h1 {
+    @apply text-3xl font-semibold tracking-tight;
+  }
+
+  .text-h2 {
+    @apply text-2xl font-semibold tracking-tight;
+  }
+
+  .text-h3 {
+    @apply text-xl font-semibold;
+  }
+
+  .text-body-lg {
+    @apply text-lg;
+  }
+
+  .text-body {
+    @apply text-base;
+  }
+
+  .text-body-sm {
+    @apply text-sm;
+  }
+
+  .text-caption {
+    @apply text-xs;
+  }
 }
 
 @layer base {
