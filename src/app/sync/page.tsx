@@ -4,9 +4,9 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { StatusBadge } from '@/components/composite/status-badge';
+import { ConsoleOutput } from '@/components/composite/console-output';
 import { Settings, Upload, RefreshCw, Play, AlertCircle, CheckCircle, Clock, FileText, Database } from 'lucide-react';
 
 interface InitStatus {
@@ -195,31 +195,6 @@ export default function SyncDashboard() {
     }
   };
 
-  const getSyncStatusBadge = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return <Badge className="bg-green-100 text-green-800 border-green-200">Completed</Badge>;
-      case 'running':
-        return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Running</Badge>;
-      case 'failed':
-        return <Badge className="bg-red-100 text-red-800 border-red-200">Failed</Badge>;
-      default:
-        return <Badge>{status}</Badge>;
-    }
-  };
-
-  const getSeverityBadge = (severity: string) => {
-    switch (severity) {
-      case 'critical':
-        return <Badge className="bg-red-100 text-red-800 border-red-200">Critical</Badge>;
-      case 'error':
-        return <Badge className="bg-orange-100 text-orange-800 border-orange-200">Error</Badge>;
-      case 'warning':
-        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">Warning</Badge>;
-      default:
-        return <Badge className="bg-gray-100 text-gray-800 border-gray-200">Info</Badge>;
-    }
-  };
 
   return (
     <div className="container mx-auto p-6 max-w-7xl">
@@ -327,13 +302,13 @@ export default function SyncDashboard() {
               )}
             </Button>
 
-              {syncOutput.length > 0 && (
-                <div className="p-3 bg-muted rounded-lg max-h-64 overflow-y-auto font-mono text-xs">
-                  {syncOutput.map((line, i) => (
-                    <div key={i} className="whitespace-pre-wrap">{line}</div>
-                  ))}
-                </div>
-              )}
+              <ConsoleOutput
+                lines={syncOutput}
+                loading={syncRunning}
+                showCopy
+                showClear
+                onClear={() => setSyncOutput([])}
+              />
             </CardContent>
           </Card>
 
@@ -371,13 +346,13 @@ export default function SyncDashboard() {
               </label>
             </div>
 
-              {uploadOutput.length > 0 && (
-                <div className="p-3 bg-muted rounded-lg max-h-64 overflow-y-auto font-mono text-xs">
-                  {uploadOutput.map((line, i) => (
-                    <div key={i} className="whitespace-pre-wrap">{line}</div>
-                  ))}
-                </div>
-              )}
+              <ConsoleOutput
+                lines={uploadOutput}
+                loading={csvUploading}
+                showCopy
+                showClear
+                onClear={() => setUploadOutput([])}
+              />
             </CardContent>
           </Card>
         </div>
@@ -401,7 +376,7 @@ export default function SyncDashboard() {
                     <div>
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium text-gray-900">{log.sync_type.replace(/_/g, ' ')}</span>
-                        {getSyncStatusBadge(log.status)}
+                        <StatusBadge status={log.status as 'pending' | 'running' | 'completed' | 'failed'} />
                       </div>
                       <p className="text-xs text-gray-500">
                         Started: {new Date(log.started_at).toLocaleString()}
@@ -456,7 +431,7 @@ export default function SyncDashboard() {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium text-gray-900">{error.error_type.replace(/_/g, ' ')}</span>
-                        {getSeverityBadge(error.severity)}
+                        <StatusBadge severity={error.severity as 'info' | 'warning' | 'error' | 'critical'} />
                       </div>
                       {error.mn_id && (
                         <p className="text-xs text-gray-500 mb-1">Mentor ID: {error.mn_id}</p>

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
+import { StatCard } from '@/components/composite/stat-card';
 import { Users, DollarSign, FileText, Settings, Database, ArrowRight, GraduationCap } from 'lucide-react';
 
 interface DashboardStats {
@@ -49,65 +49,40 @@ export default function Home() {
 
       {/* Status Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Mentors</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-8 w-20" />
-            ) : (
-              <div className="text-2xl font-bold">{stats?.totalMentors || 0}</div>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">All mentors minus dropped</p>
-          </CardContent>
-        </Card>
+        <StatCard
+          title="Total Mentors"
+          value={stats?.totalMentors || 0}
+          description="All mentors minus dropped"
+          icon={Users}
+          loading={loading}
+        />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Need Fundraising</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-8 w-20" />
-            ) : (
-              <div className="text-2xl font-bold text-orange-600">{stats?.needFundraising || 0}</div>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">Has not fundraised $75</p>
-          </CardContent>
-        </Card>
+        <StatCard
+          title="Need Fundraising"
+          value={stats?.needFundraising || 0}
+          description="Has not fundraised $75"
+          icon={DollarSign}
+          colorScheme="warning"
+          loading={loading}
+        />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Need GB Page</CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-8 w-20" />
-            ) : (
-              <div className="text-2xl font-bold text-yellow-600">{stats?.needPages || 0}</div>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">Missing fundraising page on GB</p>
-          </CardContent>
-        </Card>
+        <StatCard
+          title="Need GB Page"
+          value={stats?.needPages || 0}
+          description="Missing fundraising page on GB"
+          icon={FileText}
+          colorScheme="warning"
+          loading={loading}
+        />
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Need Training Signup</CardTitle>
-            <GraduationCap className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-8 w-20" />
-            ) : (
-              <div className="text-2xl font-bold text-blue-600">{stats?.needTraining || 0}</div>
-            )}
-            <p className="text-xs text-muted-foreground mt-1">Has not filled out training form</p>
-          </CardContent>
-        </Card>
+        <StatCard
+          title="Need Training Signup"
+          value={stats?.needTraining || 0}
+          description="Has not filled out training form"
+          icon={GraduationCap}
+          colorScheme="info"
+          loading={loading}
+        />
       </div>
 
       {/* Quick Actions */}
