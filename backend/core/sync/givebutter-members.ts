@@ -53,21 +53,36 @@ async function getAllMembers(campaignId: number): Promise<GivebutterMember[]> {
   const allMembers: GivebutterMember[] = [];
   let page = 1;
   let hasMore = true;
+  const perPage = 100; // Maximum allowed by Givebutter API
 
-  console.log('🔍 Fetching campaign members (paginated, 20 per page)...\n');
+  console.log('🔍 Fetching campaign members (paginated, 100 per page)...\n');
 
   while (hasMore) {
-    const response = await fetchGivebutter(`/campaigns/${campaignId}/members?per_page=20&page=${page}`);
+    const response = await fetchGivebutter(`/campaigns/${campaignId}/members?per_page=${perPage}&page=${page}`);
     const members = response.data;
     const meta = response.meta;
 
     allMembers.push(...members);
 
-    console.log(`   Page ${page}: fetched ${members.length} members (total so far: ${allMembers.length}/${meta.total})`);
+    const progress = Math.round((allMembers.length / meta.total) * 100);
+    console.log(`   Page ${page}/${meta.last_page}: fetched ${members.length} members (${allMembers.length}/${meta.total} = ${progress}%)`);
 
     // Check if there are more pages
     hasMore = meta.current_page < meta.last_page;
     page++;
+
+    // Small delay to be nice to the API
+    if (hasMore) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+
+  // Verify we got all members
+  const response = await fetchGivebutter(`/campaigns/${campaignId}/members?per_page=1&page=1`);
+  const expectedTotal = response.meta.total;
+
+  if (allMembers.length !== expectedTotal) {
+    console.warn(`⚠️  Warning: Expected ${expectedTotal} members but retrieved ${allMembers.length}`);
   }
 
   console.log();
@@ -111,48 +126,54 @@ async function syncMembers() {
     let inserted = 0;
     let errors = 0;
 
-    console.log('📝 Processing members...\n');
+    console.log('📝 Processing members in batches...\n');
 
-    for (const member of members) {
+    // Process in batches of 100 for better performance
+    const batchSize = 100;
+    const totalBatches = Math.ceil(members.length / batchSize);
+
+    for (let i = 0; i < members.length; i += batchSize) {
+      const batch = members.slice(i, i + batchSize);
+      const batchNum = Math.floor(i / batchSize) + 1;
+
+      const parsedBatch = batch.map(member => ({
+        member_id: member.id,
+        mn_id: null, // Will be linked later during ETL
+        first_name: member.first_name,
+        last_name: member.last_name,
+        display_name: member.display_name,
+        email: member.email,
+        phone: member.phone,
+        picture: member.picture,
+        amount_raised: member.raised,
+        goal: member.goal,
+        donors: member.donors,
+        items: member.items,
+        url: member.url,
+        created_at_gb: null, // Not provided in members API
+        updated_at_gb: null, // Not provided in members API
+      }));
+
       try {
-        const parsed = {
-          member_id: member.id,
-          mn_id: null, // Will be linked later during ETL
-          first_name: member.first_name,
-          last_name: member.last_name,
-          display_name: member.display_name,
-          email: member.email,
-          phone: member.phone,
-          picture: member.picture,
-          amount_raised: member.raised,
-          goal: member.goal,
-          donors: member.donors,
-          items: member.items,
-          url: member.url,
-          created_at_gb: null, // Not provided in members API
-          updated_at_gb: null, // Not provided in members API
-        };
-
-        // Upsert (insert or update if member_id exists)
-        const { error } = await supabase
+        // Batch upsert for better performance
+        const { error, count } = await supabase
           .from('raw_gb_campaign_members')
-          .upsert(parsed, {
+          .upsert(parsedBatch, {
             onConflict: 'member_id',
+            count: 'exact',
           });
 
         if (error) {
-          console.error(`❌ Error syncing member ${member.id}:`, error.message);
-          errors++;
+          console.error(`❌ Error syncing batch ${batchNum}/${totalBatches}:`, error.message);
+          errors += batch.length;
         } else {
-          inserted++;
-
-          if (inserted % 50 === 0) {
-            console.log(`   Processed ${inserted} members...`);
-          }
+          inserted += count || batch.length;
+          const progress = Math.round((inserted / members.length) * 100);
+          console.log(`   Batch ${batchNum}/${totalBatches}: synced ${count || batch.length} members (${inserted}/${members.length} = ${progress}%)`);
         }
       } catch (err) {
-        console.error(`❌ Error processing member ${member.id}:`, err);
-        errors++;
+        console.error(`❌ Error processing batch ${batchNum}/${totalBatches}:`, err);
+        errors += batch.length;
       }
     }
 

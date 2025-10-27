@@ -1,0 +1,49 @@
+# Dependencies
+node_modules
+/node_modules
+
+# Build output
+/build
+/.next
+/out
+
+# Supabase local
+/supabase
+.branches
+.temp
+
+# Backend scripts and data
+/backend/scripts
+/backend/data
+/backend/mcp
+/sync-sessions
+/exports
+
+# Environment files (use Vercel env vars instead)
+.env
+.env.local
+.env*.local
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+.DS_Store
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov
+
+# Documentation and planning
+/ai
+
+# Logs
+*.log
+
+# Other
+*.tmp
+*.bak
