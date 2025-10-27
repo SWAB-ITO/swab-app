@@ -55,12 +55,12 @@ Next steps for all mentors...
 
 ### 1. Plan Your Campaign
 
-Create a campaign plan in `messages/<campaign_name>/PLAN.md`:
+Create a campaign plan in `gb_imports/<campaign_name>/PLAN.md`:
 - Define message content for text and email
 - Specify status-specific variants
 - Document campaign goals and target audience
 
-See `messages/initial_message - 10.13/PLAN.md` as an example.
+See `gb_imports/initial_message - 10.13/PLAN.md` as an example.
 
 ### 2. Verify Data Sources
 
@@ -79,7 +79,7 @@ This shows:
 Create a campaign script (or copy from template):
 ```bash
 cp backend/features/comms/templates/campaign-template.ts \
-   backend/features/comms/messages/<campaign_name>/<campaign_name>.ts
+   backend/features/comms/gb_imports/<campaign_name>/<campaign_name>.ts
 ```
 
 Customize the script with your message content from PLAN.md.
@@ -93,7 +93,7 @@ Customize the script with your message content from PLAN.md.
 
 **ALWAYS test first:**
 ```bash
-npx tsx backend/features/comms/messages/<campaign_name>/<campaign_name>.ts --test
+npx tsx backend/features/comms/gb_imports/<campaign_name>/<campaign_name>.ts --test
 ```
 
 This will:
@@ -106,7 +106,7 @@ This will:
 
 Once testing passes:
 ```bash
-npx tsx backend/features/comms/messages/<campaign_name>/<campaign_name>.ts
+npx tsx backend/features/comms/gb_imports/<campaign_name>/<campaign_name>.ts
 ```
 
 This will:
@@ -167,7 +167,7 @@ backend/features/comms/
 │   ├── validate.ts                    # Validate CSV before Givebutter upload
 │   ├── query.ts                       # Query and analyze mentor data
 │   └── test.ts                        # Test campaign message generation
-└── messages/
+└── gb_imports/
     └── initial_message - 10.13/       # Example campaign
         ├── PLAN.md                    # Campaign plan and message content
         └── initial_message_10_13.ts   # Campaign script
@@ -279,4 +279,4 @@ Givebutter Plus includes unlimited SMS (up to 10,000 per day). Multi-part SMS (2
 
 ## Questions?
 
-Contact the development team or reference the campaign scripts in `messages/` for examples.
+Contact the development team or reference the campaign scripts in `gb_imports/` for examples.

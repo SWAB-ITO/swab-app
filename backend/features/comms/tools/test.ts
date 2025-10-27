@@ -198,14 +198,14 @@ async function testPipeline() {
   console.log('📝 Test 8: Export Scripts Availability');
   try {
     const fs = require('fs');
-    const exportPath = resolve(__dirname, 'export-contacts.ts');
-    const validatePath = resolve(__dirname, 'validate-export.ts');
+    const exportPath = resolve(__dirname, 'export.ts');
+    const validatePath = resolve(__dirname, 'validate.ts');
 
-    if (!fs.existsSync(exportPath)) throw new Error('export-contacts.ts not found');
-    if (!fs.existsSync(validatePath)) throw new Error('validate-export.ts not found');
+    if (!fs.existsSync(exportPath)) throw new Error('export.ts not found');
+    if (!fs.existsSync(validatePath)) throw new Error('validate.ts not found');
 
-    console.log('   ✅ export-contacts.ts exists');
-    console.log('   ✅ validate-export.ts exists\n');
+    console.log('   ✅ export.ts exists');
+    console.log('   ✅ validate.ts exists\n');
     testsPassed++;
   } catch (error) {
     console.log('   ❌ Export scripts missing:', error);
@@ -224,11 +224,11 @@ async function testPipeline() {
     console.log('🎉 ALL TESTS PASSED! Pipeline is ready to use.');
     console.log();
     console.log('📝 Next Steps:');
-    console.log('   1. Run: npx tsx backend/features/text-messages/query-mentors.ts');
-    console.log('   2. Customize text-campaign-template.ts for your first campaign');
+    console.log('   1. Run: npx tsx backend/features/comms/tools/query.ts');
+    console.log('   2. Customize campaign-template.ts for your first campaign');
     console.log('   3. Run the template to generate messages');
-    console.log('   4. Export: npm run text:export');
-    console.log('   5. Validate: npm run text:validate');
+    console.log('   4. Export: npm run comms:export');
+    console.log('   5. Validate: npm run comms:validate');
     console.log('   6. Upload CSV to Givebutter');
   } else {
     console.log('⚠️  Some tests failed. Review errors above before proceeding.');

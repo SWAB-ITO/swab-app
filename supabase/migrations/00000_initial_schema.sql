@@ -7,6 +7,7 @@
 --   RAW SOURCES (external data):
 --     - raw_mn_signups (Jotform: initial signup + BGC)
 --     - raw_mn_funds_setup (Jotform: fundraiser setup form)
+--     - raw_mn_training_signup (Jotform: training session signup)
 --     - raw_gb_full_contacts (CSV upload + API: all GB contacts)
 --     - raw_gb_campaign_members (GB API: campaign fundraising data)
 --
@@ -18,6 +19,7 @@
 --
 --   ADMIN:
 --     - mn_errors (error tracking)
+--     - mn_changes (mentor changes and issues tracking)
 --     - sync_log (sync history)
 --     - csv_import_log (CSV upload tracking)
 -- ============================================================================
@@ -123,6 +125,36 @@ CREATE TABLE raw_mn_funds_setup (
 CREATE INDEX idx_raw_mn_funds_setup_email ON raw_mn_funds_setup(email);
 CREATE INDEX idx_raw_mn_funds_setup_phone ON raw_mn_funds_setup(phone);
 CREATE TRIGGER raw_mn_funds_setup_updated_at BEFORE UPDATE ON raw_mn_funds_setup
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- ============================================================================
+-- RAW SOURCE: raw_mn_training_signup (Jotform training session signup)
+-- ============================================================================
+
+CREATE TABLE raw_mn_training_signup (
+  submission_id TEXT PRIMARY KEY,
+
+  -- Contact Info (for matching to mentors)
+  email TEXT,
+  phone TEXT,
+
+  -- Session details (if captured in the form)
+  session_date TEXT,
+  session_time TEXT,
+
+  -- Raw data from JotForm
+  raw_data JSONB,
+
+  -- Metadata
+  submitted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_raw_mn_training_signup_email ON raw_mn_training_signup(email);
+CREATE INDEX idx_raw_mn_training_signup_phone ON raw_mn_training_signup(phone);
+CREATE INDEX idx_raw_mn_training_signup_submitted_at ON raw_mn_training_signup(submitted_at);
+CREATE TRIGGER raw_mn_training_signup_updated_at BEFORE UPDATE ON raw_mn_training_signup
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 -- ============================================================================
@@ -286,6 +318,12 @@ CREATE TABLE mentors (
   -- Training
   training_done BOOLEAN DEFAULT FALSE,
   training_at TIMESTAMPTZ,
+  training_signup_done BOOLEAN DEFAULT FALSE,
+  training_signup_at TIMESTAMPTZ,
+  training_signup_submission_id TEXT,
+
+  -- Fundraising Page
+  fundraising_page_url TEXT,
 
   -- Status
   status_category TEXT,
@@ -341,13 +379,15 @@ CREATE TABLE mn_gb_import (
   "Address Subscription Status" TEXT,
 
   -- Custom Fields
-  "📝 Sign Up Complete" TEXT,
+  "✅ Mentor Training Signed Up?" TEXT,
   "💸 Givebutter Page Setup" TEXT,
   "📆 Shift Preference" TEXT,
   "👯‍♂️ Partner Preference" TEXT,
   "🚂 Mentor Training Complete" TEXT,
-  "📈 Fully Fundraised?" TEXT,
+  "📈 Fully Fundraised" TEXT,
+  "💰 Amount Fundraised" TEXT,
   "📱Custom Text Message 1️⃣" TEXT,
+  "📱Custom Text Message 2️⃣" TEXT,
   "📧 Custom Email Message 1️⃣" TEXT,
 
   -- Sync Tracking
@@ -457,6 +497,7 @@ CREATE TABLE sync_config (
   givebutter_api_key TEXT,
   jotform_signup_form_id TEXT,
   jotform_setup_form_id TEXT,
+  jotform_training_signup_form_id TEXT,
   givebutter_campaign_code TEXT,
 
   -- Sync tracking
@@ -488,6 +529,10 @@ INSERT INTO sync_config (id, system_initialized) VALUES (1, FALSE);
 CREATE TRIGGER sync_config_updated_at BEFORE UPDATE ON sync_config
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+-- Column comments
+COMMENT ON COLUMN sync_config.jotform_training_signup_form_id IS 'JotForm ID for the training session signup form (tracks when mentors register for training sessions)';
+COMMENT ON COLUMN mentors.fundraising_page_url IS 'Givebutter campaign member page URL (from raw_gb_campaign_members.url)';
+
 -- ============================================================================
 -- ADMIN: csv_import_log (CSV upload tracking)
 -- ============================================================================
@@ -518,6 +563,73 @@ CREATE TABLE csv_import_log (
 
 CREATE INDEX idx_csv_import_log_uploaded_at ON csv_import_log(uploaded_at DESC);
 CREATE INDEX idx_csv_import_log_filename ON csv_import_log(filename);
+
+-- ============================================================================
+-- ADMIN: mn_changes (mentor changes and issues tracking)
+-- ============================================================================
+
+CREATE TABLE mn_changes (
+  id SERIAL PRIMARY KEY,
+
+  -- Mentor Reference
+  mn_id TEXT REFERENCES mentors(mn_id) ON DELETE CASCADE,
+
+  -- Change/Issue Details
+  change_type TEXT NOT NULL,
+  change_category TEXT,
+  title TEXT NOT NULL,
+  description TEXT,
+
+  -- Change Data
+  field_name TEXT,
+  old_value TEXT,
+  new_value TEXT,
+
+  -- Severity & Status
+  severity TEXT CHECK (severity IN ('info', 'warning', 'error', 'critical')),
+  status TEXT DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'ignored')),
+
+  -- Resolution
+  resolved_at TIMESTAMPTZ,
+  resolved_by TEXT,
+  resolution_notes TEXT,
+
+  -- Context
+  source TEXT,
+  metadata JSONB,
+
+  -- Actor
+  created_by TEXT,
+
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_mn_changes_mn_id ON mn_changes(mn_id);
+CREATE INDEX idx_mn_changes_change_type ON mn_changes(change_type);
+CREATE INDEX idx_mn_changes_change_category ON mn_changes(change_category);
+CREATE INDEX idx_mn_changes_severity ON mn_changes(severity);
+CREATE INDEX idx_mn_changes_status ON mn_changes(status);
+CREATE INDEX idx_mn_changes_source ON mn_changes(source);
+CREATE INDEX idx_mn_changes_created_at ON mn_changes(created_at DESC);
+CREATE INDEX idx_mn_changes_resolved_at ON mn_changes(resolved_at);
+CREATE TRIGGER mn_changes_updated_at BEFORE UPDATE ON mn_changes
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Automatically set resolved_at when status changes to 'resolved'
+CREATE OR REPLACE FUNCTION set_mn_changes_resolved_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.status = 'resolved' AND OLD.status != 'resolved' THEN
+    NEW.resolved_at = NOW();
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER mn_changes_set_resolved_at BEFORE UPDATE ON mn_changes
+  FOR EACH ROW EXECUTE FUNCTION set_mn_changes_resolved_at();
 
 -- ============================================================================
 -- FUNCTION: get_sync_stats (aggregate sync statistics)
@@ -595,6 +707,81 @@ BEGIN
   GET DIAGNOSTICS phone_count = ROW_COUNT;
 
   RETURN email_count + phone_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================================
+-- FUNCTION: log_mentor_change (helper for mn_changes)
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION log_mentor_change(
+  p_mn_id TEXT,
+  p_change_type TEXT,
+  p_title TEXT,
+  p_description TEXT DEFAULT NULL,
+  p_field_name TEXT DEFAULT NULL,
+  p_old_value TEXT DEFAULT NULL,
+  p_new_value TEXT DEFAULT NULL,
+  p_severity TEXT DEFAULT 'info',
+  p_source TEXT DEFAULT NULL,
+  p_metadata JSONB DEFAULT NULL,
+  p_created_by TEXT DEFAULT 'system'
+)
+RETURNS INTEGER AS $$
+DECLARE
+  change_id INTEGER;
+BEGIN
+  INSERT INTO mn_changes (
+    mn_id,
+    change_type,
+    title,
+    description,
+    field_name,
+    old_value,
+    new_value,
+    severity,
+    source,
+    metadata,
+    created_by
+  ) VALUES (
+    p_mn_id,
+    p_change_type,
+    p_title,
+    p_description,
+    p_field_name,
+    p_old_value,
+    p_new_value,
+    p_severity,
+    p_source,
+    p_metadata,
+    p_created_by
+  )
+  RETURNING id INTO change_id;
+
+  RETURN change_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================================================
+-- FUNCTION: get_mentor_change_summary
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION get_mentor_change_summary(p_mn_id TEXT)
+RETURNS TABLE (
+  total_changes BIGINT,
+  open_issues BIGINT,
+  critical_issues BIGINT,
+  last_change_at TIMESTAMPTZ
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT
+    COUNT(*)::BIGINT as total_changes,
+    COUNT(*) FILTER (WHERE status = 'open')::BIGINT as open_issues,
+    COUNT(*) FILTER (WHERE severity = 'critical' AND status = 'open')::BIGINT as critical_issues,
+    MAX(created_at) as last_change_at
+  FROM mn_changes
+  WHERE mn_id = p_mn_id;
 END;
 $$ LANGUAGE plpgsql;
 

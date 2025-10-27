@@ -234,7 +234,7 @@ export function FormSelector({
           )}
         </SelectTrigger>
 
-        <SelectContent>
+        <SelectContent position="popper" className="max-h-[min(400px,var(--radix-select-content-available-height))]">
           {/* Search input */}
           {searchable && options.length > 5 && (
             <div className="p-2 border-b">

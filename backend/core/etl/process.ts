@@ -485,6 +485,7 @@ function processMentorSignup(
   context: {
     phoneToContact: Map<string, RawContact>;
     emailToContacts: Map<string, RawContact[]>;
+    rawContacts: RawContact[];
     rawSetup: RawSetup[];
     rawTrainingSignup: RawTrainingSignup[];
     rawMembers: RawMember[];
@@ -516,92 +517,136 @@ function processMentorSignup(
   const preferredName = signup.preferred_name?.trim() || firstName;
   const fullName = buildFullName(signup);
 
-  // Match to Givebutter contact (Priority: phone → email)
+  // Match to Givebutter contact
+  // PRIORITY: External ID FIRST, then phone/email
   let gbContactId: number | undefined;
   let gbMemberId: number | undefined;
   let hasDroppedTag = false;
 
-  // Collect ALL contacts matching by phone OR email
   const normPersonalEmail = normalizeEmail(signup.personal_email);
   const normUgaEmail = normalizeEmail(signup.uga_email);
 
-  const matchingContacts: RawContact[] = [];
+  // STEP 1: Check if ANY contact has this External ID (MN ID)
+  // This is the HIGHEST priority - if a contact already has this MN ID, use it
+  const contactByExternalId = context.rawContacts.find((c: RawContact) => c.external_id === signup.mn_id);
 
-  // Add phone match if found
-  const contactByPhone = context.phoneToContact.get(normPhone);
-  if (contactByPhone) {
-    matchingContacts.push(contactByPhone);
-  }
+  if (contactByExternalId) {
+    // Found contact with matching External ID - use it regardless of phone/email
+    gbContactId = contactByExternalId.contact_id;
+    hasDroppedTag = contactByExternalId.tags?.includes('Dropped 25') || false;
 
-  // Add all email matches (personal and UGA)
-  if (normPersonalEmail) {
-    const byPersonalEmail = context.emailToContacts.get(normPersonalEmail) || [];
-    byPersonalEmail.forEach(c => {
-      if (!matchingContacts.find(existing => existing.contact_id === c.contact_id)) {
-        matchingContacts.push(c);
-      }
-    });
-  }
-  if (normUgaEmail) {
-    const byUgaEmail = context.emailToContacts.get(normUgaEmail) || [];
-    byUgaEmail.forEach(c => {
-      if (!matchingContacts.find(existing => existing.contact_id === c.contact_id)) {
-        matchingContacts.push(c);
-      }
-    });
-  }
+    // Log if phone/email don't match (possible data inconsistency)
+    const phoneMatches = contactByExternalId.primary_phone === normPhone;
+    const emailMatches =
+      contactByExternalId.primary_email === normPersonalEmail ||
+      contactByExternalId.primary_email === normUgaEmail;
 
-  if (matchingContacts.length > 0) {
-    // Smart matching when there are multiple contacts
-    // Priority:
-    // 1. Contact with matching External ID
-    // 2. Contact with phone number (junk duplicates have null phones)
-    // 3. Contact with real name (not auto-generated "F.XXXXX L.XXXXX")
-    // 4. Newest contact (highest ID)
-
-    const isJunkContact = (c: RawContact) => {
-      const firstName = c.first_name || '';
-      const lastName = c.last_name || '';
-      // Check for auto-generated pattern: "F.25.XXXXX L.25.XXXXX"
-      return /^F\.\d+\.\d+$/.test(firstName) && /^L\.\d+\.\d+$/.test(lastName);
-    };
-
-    matchingContacts.sort((a, b) => {
-      // 1. Prefer contact with matching external_id
-      const aHasMatchingExternalId = a.external_id === signup.mn_id;
-      const bHasMatchingExternalId = b.external_id === signup.mn_id;
-      if (aHasMatchingExternalId && !bHasMatchingExternalId) return -1;
-      if (!aHasMatchingExternalId && bHasMatchingExternalId) return 1;
-
-      // 2. Prefer contact with phone number
-      const aHasPhone = !!a.primary_phone;
-      const bHasPhone = !!b.primary_phone;
-      if (aHasPhone && !bHasPhone) return -1;
-      if (!aHasPhone && bHasPhone) return 1;
-
-      // 3. Avoid junk/auto-generated contacts
-      const aIsJunk = isJunkContact(a);
-      const bIsJunk = isJunkContact(b);
-      if (!aIsJunk && bIsJunk) return -1;
-      if (aIsJunk && !bIsJunk) return 1;
-
-      // 4. Prefer newer contact (higher ID)
-      return b.contact_id - a.contact_id;
-    });
-
-    gbContactId = matchingContacts[0].contact_id;
-    // Check for "Dropped 25" tag
-    hasDroppedTag = matchingContacts[0].tags?.includes('Dropped 25') || false;
-
-    if (matchingContacts.length > 1) {
+    if (!phoneMatches || !emailMatches) {
       errors.push({
         mn_id: signup.mn_id,
-        error_type: 'multiple_contacts',
-        error_message: `Found ${matchingContacts.length} Givebutter contacts (phone/email) - selected ${gbContactId}`,
+        error_type: 'external_id_mismatch',
+        error_message: `Found contact by External ID ${signup.mn_id} but phone/email don't match`,
         severity: 'warning',
         source_table: 'raw_gb_full_contacts',
-        raw_data: { contacts: matchingContacts.map(c => ({ id: c.contact_id, external_id: c.external_id, has_phone: !!c.primary_phone, is_junk: isJunkContact(c) })) },
+        raw_data: {
+          contact_id: contactByExternalId.contact_id,
+          gb_phone: contactByExternalId.primary_phone,
+          gb_email: contactByExternalId.primary_email,
+          jotform_phone: normPhone,
+          jotform_email: normPersonalEmail || normUgaEmail,
+        },
       });
+    }
+  } else {
+    // STEP 2: No External ID match - fall back to phone/email matching
+    const matchingContacts: RawContact[] = [];
+
+    // Add phone match if found
+    const contactByPhone = context.phoneToContact.get(normPhone);
+    if (contactByPhone) {
+      matchingContacts.push(contactByPhone);
+    }
+
+    // Add all email matches (personal and UGA)
+    if (normPersonalEmail) {
+      const byPersonalEmail = context.emailToContacts.get(normPersonalEmail) || [];
+      byPersonalEmail.forEach(c => {
+        if (!matchingContacts.find(existing => existing.contact_id === c.contact_id)) {
+          matchingContacts.push(c);
+        }
+      });
+    }
+    if (normUgaEmail) {
+      const byUgaEmail = context.emailToContacts.get(normUgaEmail) || [];
+      byUgaEmail.forEach(c => {
+        if (!matchingContacts.find(existing => existing.contact_id === c.contact_id)) {
+          matchingContacts.push(c);
+        }
+      });
+    }
+
+    if (matchingContacts.length > 0) {
+      // Smart matching when there are multiple contacts
+      // Priority:
+      // 1. Contact with phone number (junk duplicates have null phones)
+      // 2. Contact with real name (not auto-generated "F.XXXXX L.XXXXX")
+      // 3. Newest contact (highest ID)
+      // Note: External ID priority removed since we already checked that above
+
+      const isJunkContact = (c: RawContact) => {
+        const firstName = c.first_name || '';
+        const lastName = c.last_name || '';
+        // Check for auto-generated pattern: "F.25.XXXXX L.25.XXXXX"
+        return /^F\.\d+\.\d+$/.test(firstName) && /^L\.\d+\.\d+$/.test(lastName);
+      };
+
+      matchingContacts.sort((a, b) => {
+        // 1. Prefer contact with phone number
+        const aHasPhone = !!a.primary_phone;
+        const bHasPhone = !!b.primary_phone;
+        if (aHasPhone && !bHasPhone) return -1;
+        if (!aHasPhone && bHasPhone) return 1;
+
+        // 2. Avoid junk/auto-generated contacts
+        const aIsJunk = isJunkContact(a);
+        const bIsJunk = isJunkContact(b);
+        if (!aIsJunk && bIsJunk) return -1;
+        if (aIsJunk && !bIsJunk) return 1;
+
+        // 3. Prefer newer contact (higher ID)
+        return b.contact_id - a.contact_id;
+      });
+
+      gbContactId = matchingContacts[0].contact_id;
+      // Check for "Dropped 25" tag
+      hasDroppedTag = matchingContacts[0].tags?.includes('Dropped 25') || false;
+
+      // Warn if matched contact has a DIFFERENT External ID
+      if (matchingContacts[0].external_id && matchingContacts[0].external_id !== signup.mn_id) {
+        errors.push({
+          mn_id: signup.mn_id,
+          error_type: 'external_id_conflict',
+          error_message: `Matched contact ${gbContactId} has different External ID: ${matchingContacts[0].external_id}`,
+          severity: 'error',
+          source_table: 'raw_gb_full_contacts',
+          raw_data: {
+            matched_contact_id: gbContactId,
+            existing_external_id: matchingContacts[0].external_id,
+            expected_external_id: signup.mn_id,
+          },
+        });
+      }
+
+      if (matchingContacts.length > 1) {
+        errors.push({
+          mn_id: signup.mn_id,
+          error_type: 'multiple_contacts',
+          error_message: `Found ${matchingContacts.length} Givebutter contacts (phone/email) - selected ${gbContactId}`,
+          severity: 'warning',
+          source_table: 'raw_gb_full_contacts',
+          raw_data: { contacts: matchingContacts.map(c => ({ id: c.contact_id, external_id: c.external_id, has_phone: !!c.primary_phone, is_junk: isJunkContact(c) })) },
+        });
+      }
     }
   }
 
@@ -821,6 +866,7 @@ async function etlProcess() {
   const processingContext = {
     phoneToContact,
     emailToContacts,
+    rawContacts: rawContacts as RawContact[] || [],
     rawSetup: rawSetup as RawSetup[] || [],
     rawTrainingSignup: rawTrainingSignup as RawTrainingSignup[] || [],
     rawMembers: rawMembers as RawMember[] || [],
@@ -897,7 +943,7 @@ async function etlProcess() {
   console.log('📋 Populating mn_gb_import...\n');
 
   // Note: Personalized messages are now generated by campaign scripts
-  // See backend/features/comms/messages/ for campaign-specific message generation
+  // See backend/features/comms/gb_imports/ for campaign-specific message generation
   const messageEngine = null;
 
   // Clear existing

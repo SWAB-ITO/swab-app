@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 /**
  * Individual step in the wizard
@@ -199,13 +199,17 @@ export function ConfigWizard({
 
   /**
    * Navigate to a specific step
+   * Only allow going back or to the next step
    */
   const goToStep = useCallback((stepIndex: number) => {
     if (stepIndex >= 0 && stepIndex < steps.length) {
-      setCurrentStep(stepIndex);
-      setValidationError(null);
+      // Allow going backwards or to the immediate next step
+      if (stepIndex <= currentStep + 1) {
+        setCurrentStep(stepIndex);
+        setValidationError(null);
+      }
     }
-  }, [steps.length]);
+  }, [steps.length, currentStep]);
 
   /**
    * Navigate to next step
@@ -296,20 +300,27 @@ export function ConfigWizard({
 
           {/* Step Navigation Dots */}
           <div className="flex items-center gap-2">
-            {steps.map((s, index) => (
-              <button
-                key={s.id}
-                onClick={() => goToStep(index)}
-                className={`h-2 rounded-full transition-all ${
-                  index === currentStep
-                    ? 'bg-primary w-8'
-                    : index < currentStep
-                    ? 'bg-primary/60 w-2'
-                    : 'bg-muted w-2'
-                }`}
-                aria-label={`Go to step ${index + 1}: ${s.title}`}
-              />
-            ))}
+            {steps.map((s, index) => {
+              const isClickable = index <= currentStep + 1;
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => goToStep(index)}
+                  disabled={!isClickable}
+                  className={`h-2 rounded-full transition-all ${
+                    index === currentStep
+                      ? 'bg-primary w-8'
+                      : index < currentStep
+                      ? 'bg-primary/60 w-2 cursor-pointer hover:bg-primary/80'
+                      : index === currentStep + 1
+                      ? 'bg-muted w-2 cursor-pointer hover:bg-muted-foreground/30'
+                      : 'bg-muted/40 w-2 cursor-not-allowed'
+                  }`}
+                  aria-label={`${isClickable ? 'Go to' : 'Locked'} step ${index + 1}: ${s.title}`}
+                  aria-disabled={!isClickable}
+                />
+              );
+            })}
           </div>
         </div>
       </CardHeader>
@@ -336,36 +347,40 @@ export function ConfigWizard({
         )}
 
         {/* Navigation Buttons */}
-        <div className="flex items-center justify-between pt-4 border-t">
-          <Button
-            variant="outline"
-            onClick={handlePrevious}
-            disabled={isFirstStep}
-          >
-            <ChevronLeft className="h-4 w-4 mr-2" />
-            Previous
-          </Button>
+        {!isLastStep && (
+          <div className="flex items-center justify-between pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={handlePrevious}
+              disabled={isFirstStep}
+            >
+              <ChevronLeft className="h-4 w-4 mr-2" />
+              Previous
+            </Button>
 
-          <div className="text-sm text-muted-foreground">
-            {step.optional && '(Optional)'}
+            <div className="text-sm text-muted-foreground">
+              {step.optional && '(Optional)'}
+            </div>
+
+            <Button
+              onClick={handleNext}
+            >
+              Next
+              <ChevronRight className="h-4 w-4 ml-2" />
+            </Button>
           </div>
-
-          <Button
-            onClick={handleNext}
-          >
-            {isLastStep ? (
-              <>
-                <Check className="h-4 w-4 mr-2" />
-                Complete
-              </>
-            ) : (
-              <>
-                Next
-                <ChevronRight className="h-4 w-4 ml-2" />
-              </>
-            )}
-          </Button>
-        </div>
+        )}
+        {isLastStep && (
+          <div className="flex items-center justify-start pt-4 border-t">
+            <Button
+              variant="outline"
+              onClick={handlePrevious}
+            >
+              <ChevronLeft className="h-4 w-4 mr-2" />
+              Previous
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

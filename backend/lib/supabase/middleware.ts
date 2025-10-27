@@ -1,8 +1,15 @@
 import { createServerClient } from '@supabase/ssr'
 import { type NextRequest, NextResponse } from 'next/server'
-import { getSupabaseConfig } from '../../core/config/supabase'
+import { getSupabaseConfig, isUsingLocalSupabase } from '../../core/config/supabase'
 
 export async function updateSession(request: NextRequest) {
+  // Skip auth for local development
+  if (isUsingLocalSupabase()) {
+    return NextResponse.next({
+      request,
+    })
+  }
+
   let supabaseResponse = NextResponse.next({
     request,
   })

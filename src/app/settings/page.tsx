@@ -4,17 +4,36 @@ import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { FormSelector } from '@/components/composite/form-selector';
+import { Checklist } from '@/components/composite/checklist';
+import { StatusCard } from '@/components/composite/status-card';
+import { ConfigWizard, WizardStep } from '@/components/features/config/config-wizard';
+import {
+  ApiConfigStep,
+  FormsStep,
+  UploadStep,
+  ReviewStep,
+  type JotformForm,
+  type GivebutterCampaign,
+  type ApiStatus,
+  type SyncConfig
+} from '@/components/features/config/wizard-steps';
 import { Settings as SettingsIcon, User, Database, Bell, Palette, CheckCircle2, AlertCircle } from 'lucide-react';
 
 type Tab = 'account' | 'api-config' | 'preferences';
-type SyncTab = 'config' | 'forms' | 'upload' | 'sync';
 
 function SettingsContent() {
   const searchParams = useSearchParams();
@@ -28,37 +47,56 @@ function SettingsContent() {
   }, [tabParam]);
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold tracking-tight mb-2">Settings</h1>
-        <p className="text-muted-foreground text-lg">Manage your account and application preferences</p>
-      </div>
-
-      <Separator className="mb-8" />
+    <div className="min-h-screen bg-gradient-to-br from-accent/5 via-background to-primary/5">
+      <div className="container mx-auto p-6 md:p-8 max-w-7xl">
+        {/* Header */}
+        <div className="mb-12">
+          <div className="inline-block mb-4">
+            <span className="text-sm font-semibold text-accent-text bg-accent-DEFAULT/10 px-4 py-2 rounded-full border border-accent-DEFAULT/20">
+              Configuration & Preferences
+            </span>
+          </div>
+          <h1 className="text-5xl md:text-6xl font-bold tracking-tight mb-4 bg-gradient-to-r from-foreground via-foreground to-foreground/70 bg-clip-text">
+            Settings
+          </h1>
+          <p className="text-muted-foreground text-xl md:text-2xl font-light max-w-2xl">
+            Manage your account and application preferences
+          </p>
+        </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as Tab)} className="space-y-6">
-        <TabsList>
-          <TabsTrigger value="account" className="flex items-center gap-2">
-            <User className="h-4 w-4" />
-            Account
-          </TabsTrigger>
-          <TabsTrigger value="api-config" className="flex items-center gap-2">
-            <Database className="h-4 w-4" />
-            API Configuration
-          </TabsTrigger>
-          <TabsTrigger value="preferences" className="flex items-center gap-2">
-            <Palette className="h-4 w-4" />
-            Preferences
-          </TabsTrigger>
-        </TabsList>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as Tab)} className="space-y-10">
+        <div className="flex justify-center">
+          <TabsList className="grid grid-cols-3 w-full max-w-2xl h-12 p-1 bg-muted/30">
+            <TabsTrigger
+              value="account"
+              className="flex items-center justify-center gap-2 text-base font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all"
+            >
+              <User className="h-4 w-4" />
+              <span className="hidden sm:inline">Account</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="api-config"
+              className="flex items-center justify-center gap-2 text-base font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all"
+            >
+              <Database className="h-4 w-4" />
+              <span className="hidden sm:inline">API Config</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="preferences"
+              className="flex items-center justify-center gap-2 text-base font-medium data-[state=active]:bg-background data-[state=active]:shadow-md transition-all"
+            >
+              <Palette className="h-4 w-4" />
+              <span className="hidden sm:inline">Preferences</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-        <TabsContent value="account" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Account Settings</CardTitle>
-              <CardDescription>Manage your account details and authentication</CardDescription>
+        <TabsContent value="account" className="space-y-6">
+          <Card className="border-border/40">
+            <CardHeader className="pb-6">
+              <CardTitle className="text-2xl">Account Settings</CardTitle>
+              <CardDescription className="text-base mt-2">Manage your account details and authentication</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
@@ -78,11 +116,11 @@ function SettingsContent() {
           <ApiConfigContent />
         </TabsContent>
 
-        <TabsContent value="preferences" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Appearance & Preferences</CardTitle>
-              <CardDescription>Customize your application experience</CardDescription>
+        <TabsContent value="preferences" className="space-y-6">
+          <Card className="border-border/40">
+            <CardHeader className="pb-6">
+              <CardTitle className="text-2xl">Appearance & Preferences</CardTitle>
+              <CardDescription className="text-base mt-2">Customize your application experience</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
@@ -103,6 +141,7 @@ function SettingsContent() {
           </Card>
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 }
@@ -124,46 +163,7 @@ export default function Settings() {
   );
 }
 
-interface ApiStatus {
-  jotform: boolean | null;
-  givebutter: boolean | null;
-}
-
-interface JotformForm {
-  id: string;
-  title: string;
-  count: number;
-  status: string;
-}
-
-interface GivebutterCampaign {
-  id: number;
-  code: string;
-  title: string;
-  members_count: number;
-}
-
-interface SyncConfig {
-  configured: boolean;
-  config: {
-    jotform_api_key: string;
-    givebutter_api_key: string;
-    jotform_signup_form_id: string;
-    jotform_setup_form_id: string;
-    givebutter_campaign_code: string;
-    configured_at: string;
-  } | null;
-  stats: Array<{
-    sync_type: string;
-    last_sync: string;
-    total_syncs: number;
-    failed_syncs: number;
-    avg_duration_seconds: number;
-  }>;
-}
-
 function ApiConfigContent() {
-  const [activeTab, setActiveTab] = useState<SyncTab>('config');
   const [apiKeys, setApiKeys] = useState({
     jotform: '',
     givebutter: '',
@@ -177,6 +177,11 @@ function ApiConfigContent() {
     jotform: null,
     givebutter: null,
   });
+  // Store successfully tested API keys separately
+  const [testedApiKeys, setTestedApiKeys] = useState<{
+    jotform?: string;
+    givebutter?: string;
+  }>({});
 
   // Discovery state
   const [jotformForms, setJotformForms] = useState<JotformForm[]>([]);
@@ -248,7 +253,7 @@ function ApiConfigContent() {
   };
 
   const handleDiscoverJotform = async () => {
-    const jotformKey = apiKeys.jotform || storedConfig?.config?.jotform_api_key;
+    const jotformKey = apiKeys.jotform || testedApiKeys.jotform || storedConfig?.config?.jotform_api_key;
     if (!jotformKey) return;
 
     setDiscoveringJotform(true);
@@ -271,7 +276,7 @@ function ApiConfigContent() {
   };
 
   const handleDiscoverGivebutter = async () => {
-    const givebutterKey = apiKeys.givebutter || storedConfig?.config?.givebutter_api_key;
+    const givebutterKey = apiKeys.givebutter || testedApiKeys.givebutter || storedConfig?.config?.givebutter_api_key;
     if (!givebutterKey) return;
 
     setDiscoveringGivebutter(true);
@@ -296,9 +301,9 @@ function ApiConfigContent() {
   const handleSaveConfig = async () => {
     setSavingConfig(true);
     try {
-      // If API keys are empty and config exists, use existing keys
-      const jotformKey = apiKeys.jotform || storedConfig?.config?.jotform_api_key;
-      const givebutterKey = apiKeys.givebutter || storedConfig?.config?.givebutter_api_key;
+      // Priority: current input > tested keys > stored config
+      const jotformKey = apiKeys.jotform || testedApiKeys.jotform || storedConfig?.config?.jotform_api_key;
+      const givebutterKey = apiKeys.givebutter || testedApiKeys.givebutter || storedConfig?.config?.givebutter_api_key;
 
       if (!jotformKey || !givebutterKey) {
         showDialog(
@@ -350,9 +355,9 @@ function ApiConfigContent() {
     setApiStatus({ jotform: null, givebutter: null });
 
     try {
-      // Use stored keys if fields are empty
-      const jotformKey = apiKeys.jotform || storedConfig?.config?.jotform_api_key;
-      const givebutterKey = apiKeys.givebutter || storedConfig?.config?.givebutter_api_key;
+      // Priority: current input > tested keys > stored config
+      const jotformKey = apiKeys.jotform || testedApiKeys.jotform || storedConfig?.config?.jotform_api_key;
+      const givebutterKey = apiKeys.givebutter || testedApiKeys.givebutter || storedConfig?.config?.givebutter_api_key;
 
       if (!jotformKey || !givebutterKey) {
         showDialog(
@@ -379,8 +384,12 @@ function ApiConfigContent() {
       const result = await response.json();
       setApiStatus(result);
 
-      // Auto-discover forms and campaigns if both APIs are successful
+      // Store the successfully tested keys
       if (result.jotform && result.givebutter) {
+        setTestedApiKeys({
+          jotform: jotformKey,
+          givebutter: givebutterKey,
+        });
         // Auto-discover Jotform forms
         handleDiscoverJotform();
         // Auto-discover Givebutter campaigns
@@ -476,481 +485,125 @@ function ApiConfigContent() {
     }
   };
 
+  // Define wizard steps
+  const wizardSteps: WizardStep[] = [
+    {
+      id: 'api-config',
+      title: 'API Configuration',
+      description: 'Configure your API keys for Jotform and Givebutter',
+      component: (
+        <ApiConfigStep
+          apiKeys={{ jotform: apiKeys.jotform, givebutter: apiKeys.givebutter }}
+          setApiKeys={setApiKeys}
+          storedConfig={storedConfig}
+          apiStatus={apiStatus}
+          testingApis={testingApis}
+          onTestApis={handleTestApis}
+        />
+      ),
+      validate: () => {
+        if (!apiStatus.jotform && !storedConfig?.configured) {
+          return 'Please test your Jotform API connection';
+        }
+        if (!apiStatus.givebutter && !storedConfig?.configured) {
+          return 'Please test your Givebutter API connection';
+        }
+        return true;
+      },
+    },
+    {
+      id: 'form-selection',
+      title: 'Form Selection',
+      description: 'Select forms and campaigns to sync',
+      component: (
+        <FormsStep
+          apiKeys={{
+            jotformSignupForm: apiKeys.jotformSignupForm,
+            jotformSetupForm: apiKeys.jotformSetupForm,
+            jotformTrainingSignupForm: apiKeys.jotformTrainingSignupForm,
+            givebutterCampaign: apiKeys.givebutterCampaign,
+          }}
+          setApiKeys={setApiKeys}
+          jotformForms={jotformForms}
+          givebutterCampaigns={givebutterCampaigns}
+          discoveringJotform={discoveringJotform}
+          discoveringGivebutter={discoveringGivebutter}
+          onDiscoverJotform={handleDiscoverJotform}
+          onDiscoverGivebutter={handleDiscoverGivebutter}
+        />
+      ),
+      validate: () => {
+        if (!apiKeys.jotformSignupForm) return 'Please select a signup form';
+        if (!apiKeys.jotformSetupForm) return 'Please select a setup form';
+        if (!apiKeys.jotformTrainingSignupForm) return 'Please select a training signup form';
+        if (!apiKeys.givebutterCampaign) return 'Please select a campaign';
+        return true;
+      },
+    },
+    {
+      id: 'csv-upload',
+      title: 'CSV Upload',
+      description: 'Upload Givebutter contact export',
+      component: (
+        <UploadStep
+          uploadedFile={uploadedFile}
+          uploadStatus={uploadStatus}
+          onFileUpload={handleFileUpload}
+        />
+      ),
+      optional: true,
+    },
+    {
+      id: 'review-sync',
+      title: 'Review & Sync',
+      description: 'Review configuration and run sync',
+      component: (
+        <ReviewStep
+          apiKeys={apiKeys}
+          apiStatus={apiStatus}
+          storedConfig={storedConfig}
+          uploadStatus={uploadStatus}
+          savingConfig={savingConfig}
+          syncRunning={syncRunning}
+          syncProgress={syncProgress}
+          onSaveConfig={handleSaveConfig}
+          onRunSync={handleRunSync}
+        />
+      ),
+    },
+  ];
+
   return (
     <>
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Database className="h-5 w-5" />
+    <Card className="border-border/40">
+      <CardHeader className="pb-6">
+        <CardTitle className="flex items-center gap-3 text-2xl">
+          <Database className="h-6 w-6 text-primary" />
           API Configuration & Data Sync
         </CardTitle>
-        <CardDescription>Configure API keys and run the complete data sync process</CardDescription>
+        <CardDescription className="text-base mt-2">Follow the guided wizard to configure your data synchronization</CardDescription>
       </CardHeader>
       <CardContent>
-        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as SyncTab)} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="config">1. Configure</TabsTrigger>
-            <TabsTrigger value="forms" disabled={!apiKeys.jotform && !storedConfig?.configured}>2. Forms</TabsTrigger>
-            <TabsTrigger value="upload" disabled={!apiKeys.jotformSignupForm || !apiKeys.jotformSetupForm || !apiKeys.jotformTrainingSignupForm || !apiKeys.givebutterCampaign}>3. Upload</TabsTrigger>
-            <TabsTrigger value="sync">4. Sync</TabsTrigger>
-          </TabsList>
+        <ConfigWizard
+          title="Sync Configuration Wizard"
+          steps={wizardSteps}
+          persistState
+          storageKey="swab-sync-wizard"
+          showProgress
+          showStepIndicator
+        />
 
-          <TabsContent value="config" className="space-y-6">
-            {/* Configuration Status */}
-            {storedConfig?.configured && storedConfig.config && (
-              <Alert>
-                <CheckCircle2 className="h-4 w-4" />
-                <AlertTitle>Configuration Active</AlertTitle>
-                <AlertDescription className="space-y-2">
-                  {storedConfig.config.configured_at && (
-                    <p className="text-sm">
-                      Configured on {new Date(storedConfig.config.configured_at).toLocaleDateString()} at{' '}
-                      {new Date(storedConfig.config.configured_at).toLocaleTimeString()}
-                    </p>
-                  )}
-                  {storedConfig.stats && storedConfig.stats.length > 0 && (
-                    <div className="mt-2">
-                      <p className="text-sm font-medium mb-1">Last Sync Times:</p>
-                      <ul className="space-y-1 text-sm">
-                        {storedConfig.stats.map((stat) => (
-                          <li key={stat.sync_type}>
-                            {stat.sync_type}: {stat.last_sync ? new Date(stat.last_sync).toLocaleString() : 'Never'}{' '}
-                            {stat.failed_syncs > 0 && <span className="text-destructive">({stat.failed_syncs} failed)</span>}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </AlertDescription>
-              </Alert>
-            )}
-
-            {/* Jotform */}
-            <div className="space-y-4">
-              <h4 className="font-semibold">Jotform API</h4>
-              <div className="space-y-2">
-                <Label htmlFor="jotform-key">
-                  API Key {storedConfig?.configured && <span className="text-green-600 text-xs ml-2">(configured)</span>}
-                </Label>
-                <Input
-                  id="jotform-key"
-                  type="password"
-                  placeholder={storedConfig?.configured ? "••••••••••••••••••••••••" : "Enter your Jotform API key"}
-                  value={apiKeys.jotform}
-                  onChange={e => setApiKeys({ ...apiKeys, jotform: e.target.value })}
-                  autoComplete="off"
-                  data-form-type="other"
-                />
-                <p className="text-xs text-muted-foreground">
-                  {storedConfig?.configured
-                    ? 'Leave empty to keep existing key, or enter a new one to update'
-                    : 'Get your API key from Jotform → Settings → API'
-                  }
-                </p>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Givebutter */}
-            <div className="space-y-4">
-              <h4 className="font-semibold">Givebutter API</h4>
-              <div className="space-y-2">
-                <Label htmlFor="givebutter-key">
-                  API Key {storedConfig?.configured && <span className="text-green-600 text-xs ml-2">(configured)</span>}
-                </Label>
-                <Input
-                  id="givebutter-key"
-                  type="password"
-                  placeholder={storedConfig?.configured ? "••••••••••••••••••••••••" : "Enter your Givebutter API key"}
-                  value={apiKeys.givebutter}
-                  onChange={e => setApiKeys({ ...apiKeys, givebutter: e.target.value })}
-                  autoComplete="off"
-                  data-form-type="other"
-                />
-                <p className="text-xs text-muted-foreground">
-                  {storedConfig?.configured
-                    ? 'Leave empty to keep existing key, or enter a new one to update'
-                    : 'Get your API key from Givebutter → Settings → API'
-                  }
-                </p>
-              </div>
-            </div>
-
-            <Separator />
-
-            {/* Action Buttons */}
-            <div className="space-y-3">
-              <Button
-                onClick={handleTestApis}
-                disabled={testingApis || (!apiKeys.jotform && !storedConfig?.configured) || (!apiKeys.givebutter && !storedConfig?.configured)}
-                variant="outline"
-                size="lg"
-                className="w-full"
-              >
-                {testingApis ? 'Testing...' : 'Test API Connections'}
-              </Button>
-              <p className="text-xs text-muted-foreground text-center">
-                {storedConfig?.configured
-                  ? 'Test with stored keys or enter new ones'
-                  : 'Test your API keys first, then select forms in the next step'
-                }
-              </p>
-            </div>
-
-            {/* API Status Results */}
-            {(apiStatus.jotform !== null || apiStatus.givebutter !== null) && (
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Connection Status</AlertTitle>
-                <AlertDescription className="space-y-2">
-                  {apiStatus.jotform !== null && (
-                    <div className="flex items-center gap-2">
-                      <span className={`w-3 h-3 rounded-full ${apiStatus.jotform ? 'bg-green-500' : 'bg-red-500'}`} />
-                      <span className="text-sm">
-                        Jotform: {apiStatus.jotform ? 'Connected ✓' : 'Failed ✗'}
-                      </span>
-                    </div>
-                  )}
-                  {apiStatus.givebutter !== null && (
-                    <div className="flex items-center gap-2">
-                      <span className={`w-3 h-3 rounded-full ${apiStatus.givebutter ? 'bg-green-500' : 'bg-red-500'}`} />
-                      <span className="text-sm">
-                        Givebutter: {apiStatus.givebutter ? 'Connected ✓' : 'Failed ✗'}
-                      </span>
-                    </div>
-                  )}
-                  {apiStatus.jotform && apiStatus.givebutter && (
-                    <div className="mt-3">
-                      <p className="text-sm font-medium text-green-600 mb-2">
-                        All APIs connected successfully!
-                      </p>
-                      <Button
-                        onClick={() => setActiveTab('forms')}
-                        className="w-full"
-                        size="sm"
-                      >
-                        Continue to Select Forms →
-                      </Button>
-                    </div>
-                  )}
-                </AlertDescription>
-              </Alert>
-            )}
-          </TabsContent>
-
-          <TabsContent value="forms" className="space-y-6">
-
-            {/* Jotform Forms */}
-            <div className="space-y-4">
-              <h4 className="font-semibold">Jotform Forms</h4>
-              <Button
-                onClick={handleDiscoverJotform}
-                disabled={discoveringJotform || jotformForms.length > 0}
-                variant="outline"
-                className="w-full"
-              >
-                {discoveringJotform ? 'Loading Forms...' : jotformForms.length > 0 ? `✓ Loaded ${jotformForms.length} Forms` : 'Discover Available Forms'}
-              </Button>
-
-              {jotformForms.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-form">Signup Form</Label>
-                    <select
-                      id="signup-form"
-                      value={apiKeys.jotformSignupForm}
-                      onChange={e => setApiKeys({ ...apiKeys, jotformSignupForm: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring bg-background"
-                    >
-                      <option value="">Select a form...</option>
-                      {jotformForms.map(form => (
-                        <option key={form.id} value={form.id}>
-                          {form.title} ({form.count} submissions)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="setup-form">Setup Form</Label>
-                    <select
-                      id="setup-form"
-                      value={apiKeys.jotformSetupForm}
-                      onChange={e => setApiKeys({ ...apiKeys, jotformSetupForm: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring bg-background"
-                    >
-                      <option value="">Select a form...</option>
-                      {jotformForms.map(form => (
-                        <option key={form.id} value={form.id}>
-                          {form.title} ({form.count} submissions)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="training-form">Training Signup Form</Label>
-                    <select
-                      id="training-form"
-                      value={apiKeys.jotformTrainingSignupForm}
-                      onChange={e => setApiKeys({ ...apiKeys, jotformTrainingSignupForm: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring bg-background"
-                    >
-                      <option value="">Select a form...</option>
-                      {jotformForms.map(form => (
-                        <option key={form.id} value={form.id}>
-                          {form.title} ({form.count} submissions)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <Separator />
-
-            {/* Givebutter Campaigns */}
-            <div className="space-y-4">
-              <h4 className="font-semibold">Givebutter Campaign</h4>
-              <Button
-                onClick={handleDiscoverGivebutter}
-                disabled={discoveringGivebutter || givebutterCampaigns.length > 0}
-                variant="outline"
-                className="w-full"
-              >
-                {discoveringGivebutter ? 'Loading Campaigns...' : givebutterCampaigns.length > 0 ? `✓ Loaded ${givebutterCampaigns.length} Campaigns` : 'Discover Available Campaigns'}
-              </Button>
-
-              {givebutterCampaigns.length > 0 && (
-                <div className="space-y-2">
-                  <Label htmlFor="campaign">Campaign</Label>
-                  <select
-                    id="campaign"
-                    value={apiKeys.givebutterCampaign}
-                    onChange={e => setApiKeys({ ...apiKeys, givebutterCampaign: e.target.value })}
-                    className="w-full px-3 py-2 text-sm border border-input rounded-md focus:outline-none focus:ring-2 focus:ring-ring bg-background"
-                  >
-                    <option value="">Select a campaign...</option>
-                    {givebutterCampaigns.map(campaign => (
-                      <option key={campaign.id} value={campaign.code}>
-                        {campaign.title} ({campaign.members_count} members)
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            {/* Continue Button */}
-            {apiKeys.jotformSignupForm && apiKeys.jotformSetupForm && apiKeys.jotformTrainingSignupForm && apiKeys.givebutterCampaign && (
-              <Alert>
-                <CheckCircle2 className="h-4 w-4" />
-                <AlertTitle>Forms Selected</AlertTitle>
-                <AlertDescription>
-                  <p className="mb-3">Forms and campaign selected! Proceed to upload CSV.</p>
-                  <Button onClick={() => setActiveTab('upload')} className="w-full" size="sm">
-                    Continue to CSV Upload →
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
-          </TabsContent>
-
-          <TabsContent value="upload" className="space-y-6">
-
-            <div className="border-2 border-dashed border-border/40 rounded-lg p-8 text-center bg-muted/10">
-              <input
-                type="file"
-                accept=".csv"
-                onChange={handleFileUpload}
-                className="hidden"
-                id="csv-upload"
-              />
-              <label
-                htmlFor="csv-upload"
-                className="cursor-pointer flex flex-col items-center"
-              >
-                <svg
-                  className="w-12 h-12 text-gray-400 mb-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-                  />
-                </svg>
-                <p className="text-lg font-medium text-gray-900 mb-1">
-                  Click to upload CSV
-                </p>
-                <p className="text-sm text-gray-500">
-                  or drag and drop
-                </p>
-                <p className="text-xs text-gray-400 mt-2">
-                  Supports Givebutter contacts export format
-                </p>
-              </label>
-            </div>
-
-            {/* Upload Status */}
-            {uploadedFile && (
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-gray-900 text-sm">{uploadedFile.name}</p>
-                    <p className="text-xs text-gray-500">
-                      {(uploadedFile.size / 1024 / 1024).toFixed(2)} MB
-                    </p>
-                  </div>
-                  <div className="text-sm">
-                    {uploadStatus === 'uploading' && (
-                      <span className="text-blue-600">Uploading...</span>
-                    )}
-                    {uploadStatus === 'success' && (
-                      <span className="text-green-600">✓ Uploaded</span>
-                    )}
-                    {uploadStatus === 'error' && (
-                      <span className="text-red-600">✗ Error</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Success message with continue button */}
-            {uploadStatus === 'success' && (
-              <Alert>
-                <CheckCircle2 className="h-4 w-4" />
-                <AlertTitle>Upload Successful</AlertTitle>
-                <AlertDescription>
-                  <p className="mb-3">CSV file uploaded successfully! You can now proceed to run the sync.</p>
-                  <Button onClick={() => setActiveTab('sync')} className="w-full" size="sm">
-                    Continue to Run Sync →
-                  </Button>
-                </AlertDescription>
-              </Alert>
-            )}
-          </TabsContent>
-
-          <TabsContent value="sync" className="space-y-6">
-
-            {/* Pre-sync Checklist */}
-            <Alert>
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Pre-sync Checklist</AlertTitle>
-              <AlertDescription>
-              <ul className="space-y-1 text-sm mt-2">
-                <li className="flex items-center">
-                  <span className={`mr-2 ${apiKeys.jotform ? 'text-green-600' : 'text-gray-400'}`}>
-                    {apiKeys.jotform ? '✓' : '○'}
-                  </span>
-                  Jotform API configured
-                </li>
-                <li className="flex items-center">
-                  <span className={`mr-2 ${apiKeys.givebutter ? 'text-green-600' : 'text-gray-400'}`}>
-                    {apiKeys.givebutter ? '✓' : '○'}
-                  </span>
-                  Givebutter API configured
-                </li>
-                <li className="flex items-center">
-                  <span className={`mr-2 ${apiKeys.jotformSignupForm && apiKeys.jotformSetupForm && apiKeys.jotformTrainingSignupForm && apiKeys.givebutterCampaign ? 'text-green-600' : 'text-gray-400'}`}>
-                    {apiKeys.jotformSignupForm && apiKeys.jotformSetupForm && apiKeys.jotformTrainingSignupForm && apiKeys.givebutterCampaign ? '✓' : '○'}
-                  </span>
-                  Forms and campaigns selected
-                </li>
-                <li className="flex items-center">
-                  <span className={`mr-2 ${uploadStatus === 'success' ? 'text-green-600' : 'text-gray-400'}`}>
-                    {uploadStatus === 'success' ? '✓' : '○'}
-                  </span>
-                  CSV file uploaded
-                </li>
-                <li className="flex items-center">
-                  <span className={`mr-2 ${storedConfig?.configured ? 'text-green-600' : 'text-gray-400'}`}>
-                    {storedConfig?.configured ? '✓' : '○'}
-                  </span>
-                  Configuration saved
-                </li>
-              </ul>
-              </AlertDescription>
-            </Alert>
-
-            {/* Action Buttons */}
-            <div className="grid grid-cols-2 gap-3">
-              <Button
-                onClick={handleSaveConfig}
-                disabled={
-                  (!apiKeys.jotform && !storedConfig?.configured) ||
-                  (!apiKeys.givebutter && !storedConfig?.configured) ||
-                  !apiKeys.jotformSignupForm ||
-                  !apiKeys.jotformSetupForm ||
-                  !apiKeys.jotformTrainingSignupForm ||
-                  !apiKeys.givebutterCampaign ||
-                  savingConfig
-                }
-                variant="outline"
-                size="lg"
-              >
-                {savingConfig ? 'Saving...' : storedConfig?.configured ? 'Update Config' : 'Save Config'}
-              </Button>
-              <Button
-                onClick={handleRunSync}
-                disabled={syncRunning || !storedConfig?.configured || uploadStatus !== 'success'}
-                size="lg"
-              >
-                {syncRunning ? 'Sync Running...' : 'Run Full Sync'}
-              </Button>
-            </div>
-            <p className="text-xs text-gray-500 text-center">
-              {storedConfig?.configured
-                ? 'Update configuration if needed, then run the sync'
-                : 'Save your configuration first, then run the sync'
-              }
-            </p>
-
-            {/* Sync Progress */}
-            {syncProgress.length > 0 && (
-              <div className="mt-6 space-y-2">
-                <h4 className="font-medium text-gray-900">Sync Progress</h4>
-                <div className="space-y-2">
-                  {syncProgress.map((item, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <span className="text-sm text-gray-900">{item.step}</span>
-                      <span className={`text-sm ${
-                        item.status === 'running' ? 'text-blue-600' :
-                        item.status === 'completed' ? 'text-green-600' :
-                        'text-red-600'
-                      }`}>
-                        {item.status === 'running' ? '⏳ Running...' :
-                         item.status === 'completed' ? '✓ Completed' :
-                         '✗ Error'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {!syncRunning && syncProgress.length === 0 && (
-              <div className="text-center text-sm text-gray-500">
-                <p>This will synchronize all data from your configured sources</p>
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
       </CardContent>
     </Card>
 
     {/* Dialog */}
-    <Dialog
-      isOpen={dialogOpen}
-      onClose={() => setDialogOpen(false)}
-      title={dialogTitle}
-      variant={dialogVariant}
-    >
-      {dialogMessage}
+    <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{dialogTitle}</DialogTitle>
+          <DialogDescription>{dialogMessage}</DialogDescription>
+        </DialogHeader>
+      </DialogContent>
     </Dialog>
     </>
   );

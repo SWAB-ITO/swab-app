@@ -12,11 +12,24 @@
 
 import dotenv from 'dotenv';
 import { resolve } from 'path';
-import { writeFileSync } from 'fs';
+import { writeFileSync, readFileSync } from 'fs';
 import { createClient } from '@supabase/supabase-js';
 import { getSupabaseConfig } from '../../../core/config/supabase';
 
 dotenv.config({ path: resolve(process.cwd(), '.env.local') });
+
+// Load custom fields configuration
+function loadCustomFieldsConfig() {
+  try {
+    const configPath = resolve(__dirname, '../../../core/config/custom-fields.json');
+    const configContent = readFileSync(configPath, 'utf-8');
+    return JSON.parse(configContent);
+  } catch (error) {
+    console.error('⚠️  Error loading custom-fields.json:', error);
+    console.log('   Using fallback configuration');
+    return { fields: [] };
+  }
+}
 
 function formatCSVValue(value: any): string {
   if (value === null || value === undefined) return '';
@@ -33,6 +46,10 @@ async function exportContacts(changedOnly: boolean = false, outputDir?: string) 
   console.log('\n' + '='.repeat(80));
   console.log('📤 EXPORTING CONTACTS → GIVEBUTTER CSV');
   console.log('='.repeat(80) + '\n');
+
+  // Load custom fields configuration
+  const customFieldsConfig = loadCustomFieldsConfig();
+  console.log(`⚙️  Loaded ${customFieldsConfig.fields?.length || 0} custom fields from config (Year: ${customFieldsConfig.year})\n`);
 
   const config = getSupabaseConfig();
   const supabase = createClient(config.url, config.serviceRoleKey || config.anonKey);
@@ -74,8 +91,8 @@ async function exportContacts(changedOnly: boolean = false, outputDir?: string) 
   // Generate CSV
   console.log('🔨 Generating CSV...\n');
 
-  // Givebutter CSV columns (match template exactly)
-  const headers = [
+  // Build headers: standard Givebutter fields + custom fields from config
+  const standardHeaders = [
     'Givebutter Contact ID',
     'Contact External ID',
     'Prefix',
@@ -115,17 +132,11 @@ async function exportContacts(changedOnly: boolean = false, outputDir?: string) 
     'Household Primary Contact',
     'Date Created (UTC)',
     'Last Modified (UTC)',
-    '📝 Sign Up Complete',
-    '💸 Givebutter Page Setup',
-    '📆 Shift Preference',
-    '👯‍♂️ Partner Preference',
-    '🚂 Mentor Training Complete',
-    '📈 Fully Fundraised?',
-    '📧 Custom Email Message 1️⃣',
-    '📱Custom Text Message 1️⃣',
-    '💰 Amount Fundraised',
-    '📱Custom Text Message 2️⃣',
   ];
+
+  // Add custom field headers from config
+  const customFieldHeaders = (customFieldsConfig.fields || []).map((field: any) => field.name);
+  const headers = [...standardHeaders, ...customFieldHeaders];
 
   const csvLines: string[] = [];
   csvLines.push(headers.join(','));
@@ -180,19 +191,18 @@ async function exportContacts(changedOnly: boolean = false, outputDir?: string) 
 
       // Timestamps (read-only, empty)
       formatCSVValue(''), formatCSVValue(''),
-
-      // Emoji Custom Fields (from mn_gb_import)
-      formatCSVValue(row['📝 Sign Up Complete'] || 'No'),
-      formatCSVValue(row['💸 Givebutter Page Setup'] || 'No'),
-      formatCSVValue(row['📆 Shift Preference'] || ''),
-      formatCSVValue(row['👯‍♂️ Partner Preference'] || ''),
-      formatCSVValue(row['🚂 Mentor Training Complete'] || 'No'),
-      formatCSVValue(row['📈 Fully Fundraised?'] || 'No'),
-      formatCSVValue(row['📧 Custom Email Message 1️⃣'] || ''),
-      formatCSVValue(row['📱Custom Text Message 1️⃣'] || ''),
-      formatCSVValue(row['💰 Amount Fundraised'] || ''),
-      formatCSVValue(row['📱Custom Text Message 2️⃣'] || ''),
     ];
+
+    // Add custom fields from config dynamically
+    (customFieldsConfig.fields || []).forEach((field: any) => {
+      const value = row[field.name];
+      // Apply default values for yes_no fields if empty
+      if (field.type === 'yes_no' && !value) {
+        csvRow.push(formatCSVValue('No'));
+      } else {
+        csvRow.push(formatCSVValue(value || ''));
+      }
+    });
 
     csvLines.push(csvRow.join(','));
   });
@@ -200,7 +210,7 @@ async function exportContacts(changedOnly: boolean = false, outputDir?: string) 
   // Write to file
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0];
   const filename = `givebutter-import-${timestamp}.csv`;
-  const directory = outputDir || 'backend/features/comms/messages/mentor_trainings-10.22';
+  const directory = outputDir || 'backend/features/comms/gb_imports/mentor_trainings-10.22';
   const filepath = resolve(process.cwd(), directory, filename);
 
   writeFileSync(filepath, csvLines.join('\n'), 'utf-8');

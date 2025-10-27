@@ -3,13 +3,13 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { StatusBadge } from '@/components/composite/status-badge';
 import { StatCard } from '@/components/composite/stat-card';
 import { SyncActionCard } from '@/components/features/sync/sync-action-card';
 import { SyncLogList, SyncLog as SyncLogType } from '@/components/features/sync/sync-log-list';
-import { Settings, Upload, RefreshCw, Play, AlertCircle, CheckCircle, Clock, FileText } from 'lucide-react';
+import { Settings, Upload, RefreshCw, AlertCircle, CheckCircle, Clock, FileText } from 'lucide-react';
 
 interface InitStatus {
   initialized: boolean;
@@ -189,59 +189,84 @@ export default function SyncDashboard() {
 
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold tracking-tight mb-2">Sync Dashboard</h1>
-            <p className="text-muted-foreground text-lg">Monitor and manage data synchronization</p>
+    <div className="min-h-screen bg-gradient-to-br from-info/5 via-background to-primary/5">
+      <div className="container mx-auto p-6 md:p-8 max-w-7xl">
+        {/* Header */}
+        <div className="mb-12">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+            <div>
+              <div className="inline-block mb-3">
+                <span className="text-sm font-semibold text-info-text bg-info-DEFAULT/10 px-4 py-2 rounded-full border border-info-DEFAULT/20">
+                  Data Synchronization
+                </span>
+              </div>
+              <h1 className="text-5xl md:text-6xl font-bold tracking-tight mb-4 bg-gradient-to-r from-foreground via-foreground to-foreground/70 bg-clip-text">
+                Sync Dashboard
+              </h1>
+              <p className="text-muted-foreground text-xl md:text-2xl font-light max-w-2xl">
+                Monitor and manage data synchronization from all sources
+              </p>
+            </div>
+            <Link href="/settings?tab=api-config">
+              <Button size="lg" variant="outline" className="flex items-center gap-2 hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-all shadow-sm">
+                <Settings className="h-5 w-5" />
+                Configure
+              </Button>
+            </Link>
           </div>
-          <Link href="/settings?tab=api-config">
-            <Button variant="outline" className="flex items-center gap-2">
-              <Settings className="h-4 w-4" />
-              Settings
-            </Button>
-          </Link>
         </div>
-      </div>
 
-      <Separator className="mb-8" />
+        {/* System Status Section */}
+        <section className="mb-14">
+          <div className="mb-8">
+            <h2 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
+              <div className="w-1 h-8 bg-info-DEFAULT rounded-full"></div>
+              System Status
+            </h2>
+            <p className="text-muted-foreground text-base ml-7">Current system configuration and sync status</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <StatCard
+            title="System Status"
+            value={initStatus?.initialized ? 'Initialized' : 'Not Configured'}
+            description={initStatus?.configuredAt
+              ? `Configured: ${new Date(initStatus.configuredAt).toLocaleDateString()}`
+              : 'Not configured yet'}
+            icon={initStatus?.initialized ? CheckCircle : AlertCircle}
+            colorScheme={initStatus?.initialized ? 'success' : 'warning'}
+          />
 
-      {/* Status Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <StatCard
-          title="System Status"
-          value={initStatus?.initialized ? 'Initialized' : 'Not Configured'}
-          description={initStatus?.configuredAt
-            ? `Configured: ${new Date(initStatus.configuredAt).toLocaleDateString()}`
-            : 'Not configured yet'}
-          icon={initStatus?.initialized ? CheckCircle : AlertCircle}
-          colorScheme={initStatus?.initialized ? 'success' : 'warning'}
-        />
+          <StatCard
+            title="Last Sync"
+            value={initStatus?.lastSyncAt
+              ? new Date(initStatus.lastSyncAt).toLocaleDateString()
+              : 'Never'}
+            description={initStatus?.lastSyncAt
+              ? new Date(initStatus.lastSyncAt).toLocaleTimeString()
+              : 'No syncs yet'}
+            icon={Clock}
+          />
 
-        <StatCard
-          title="Last Sync"
-          value={initStatus?.lastSyncAt
-            ? new Date(initStatus.lastSyncAt).toLocaleDateString()
-            : 'Never'}
-          description={initStatus?.lastSyncAt
-            ? new Date(initStatus.lastSyncAt).toLocaleTimeString()
-            : 'No syncs yet'}
-          icon={Clock}
-        />
+          <StatCard
+            title="Active Errors"
+            value={errors.length}
+            description="Unresolved issues"
+            icon={AlertCircle}
+            colorScheme={errors.length > 0 ? 'error' : 'success'}
+          />
+        </div>
+      </section>
 
-        <StatCard
-          title="Active Errors"
-          value={errors.length}
-          description="Unresolved issues"
-          icon={AlertCircle}
-          colorScheme={errors.length > 0 ? 'error' : 'success'}
-        />
-      </div>
-
-      {/* Sync Actions */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      {/* Sync Operations Section */}
+      <section className="mb-14">
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
+            <div className="w-1 h-8 bg-primary rounded-full"></div>
+            Sync Operations
+          </h2>
+          <p className="text-muted-foreground text-base ml-7">Run data synchronization tasks</p>
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <SyncActionCard
           icon={RefreshCw}
           title="Periodic Sync"
@@ -260,78 +285,91 @@ export default function SyncDashboard() {
           title="CSV Upload"
           description="Upload Givebutter full export → match contacts → capture contact_ids"
           tier={3}
-          actionLabel="Upload CSV"
+          actionLabel="Select CSV File"
           loading={csvUploading}
           onAction={() => document.getElementById('csv-upload')?.click()}
           outputLines={uploadOutput}
           onClearOutput={() => setUploadOutput([])}
         >
-          <div className="border-2 border-dashed border-border/40 rounded-lg p-6 text-center bg-muted/10">
-            <input
-              type="file"
-              accept=".csv"
-              onChange={handleFileUpload}
-              className="hidden"
-              id="csv-upload"
-              disabled={csvUploading}
-            />
-            <label
-              htmlFor="csv-upload"
-              className={`${csvUploading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} flex flex-col items-center`}
-            >
-              <Upload className="w-8 h-8 text-gray-400 mb-2" />
-              <p className="text-sm font-medium text-gray-900 mb-1">
-                {csvUploading ? 'Uploading...' : 'Click to upload CSV'}
-              </p>
-              <p className="text-xs text-gray-500">Givebutter full contact export</p>
-            </label>
-          </div>
+          <input
+            type="file"
+            accept=".csv"
+            onChange={handleFileUpload}
+            className="hidden"
+            id="csv-upload"
+            disabled={csvUploading}
+          />
         </SyncActionCard>
-      </div>
+        </div>
+      </section>
 
-      {/* Recent Sync Logs */}
-      <SyncLogList
-        logs={syncLogs}
-        className="mb-8"
-        maxLogs={10}
-      />
+      {/* Recent Activity Section */}
+      <section className="mb-14">
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
+            <div className="w-1 h-8 bg-success-DEFAULT rounded-full"></div>
+            Recent Activity
+          </h2>
+          <p className="text-muted-foreground text-base ml-7">View recent sync operations and their status</p>
+        </div>
+        <SyncLogList
+          logs={syncLogs}
+          maxLogs={10}
+        />
+      </section>
 
-        {/* Errors and Conflicts */}
-        <Card>
-          <CardHeader>
+      {/* Errors & Conflicts Section */}
+      <section>
+        <div className="mb-8">
+          <h2 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
+            <div className="w-1 h-8 bg-error-DEFAULT rounded-full"></div>
+            Errors & Conflicts
+          </h2>
+          <p className="text-muted-foreground text-base ml-7">Review and resolve data conflicts</p>
+        </div>
+        <Card className="border-border/40">
+          <CardHeader className="pb-4">
             <CardTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              Errors & Conflicts
+              Active Issues
             </CardTitle>
           </CardHeader>
           <CardContent>
           {errors.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No unresolved errors</p>
+            <div className="text-center py-12">
+              <CheckCircle className="h-12 w-12 text-success-DEFAULT mx-auto mb-3 opacity-50" />
+              <p className="text-muted-foreground text-base font-medium">No unresolved errors</p>
+              <p className="text-muted-foreground text-sm mt-1">All systems operating normally</p>
+            </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {errors.map((error, index) => (
-                <div key={error.error_id || `error-${index}`} className="bg-muted/30 rounded-lg p-4">
-                  <div className="flex items-start justify-between mb-2">
+                <div key={error.error_id || `error-${index}`} className="bg-gradient-to-br from-error-DEFAULT/5 to-muted/30 rounded-xl p-5 border border-error-DEFAULT/20 hover:border-error-DEFAULT/40 transition-colors">
+                  <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-gray-900">{error.error_type.replace(/_/g, ' ')}</span>
+                      <div className="flex items-center gap-3 mb-2">
+                        <AlertCircle className="h-5 w-5 text-error-DEFAULT flex-shrink-0" />
+                        <span className="font-semibold text-foreground text-base">{error.error_type.replace(/_/g, ' ')}</span>
                         <StatusBadge severity={error.severity as 'info' | 'warning' | 'error' | 'critical'} />
                       </div>
                       {error.mn_id && (
-                        <p className="text-xs text-gray-500 mb-1">Mentor ID: {error.mn_id}</p>
+                        <p className="text-sm text-muted-foreground mb-2 ml-8">Mentor ID: {error.mn_id}</p>
                       )}
-                      <p className="text-sm text-gray-700">{error.error_message}</p>
+                      <p className="text-sm text-foreground/90 ml-8">{error.error_message}</p>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-3 ml-8">
+                    <Clock className="h-3 w-3" />
                     {new Date(error.created_at).toLocaleString()}
-                  </p>
+                  </div>
                 </div>
               ))}
             </div>
           )}
           </CardContent>
         </Card>
+      </section>
+      </div>
     </div>
   );
 }

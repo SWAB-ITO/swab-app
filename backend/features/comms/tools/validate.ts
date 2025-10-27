@@ -14,6 +14,19 @@ import { readdirSync, readFileSync } from 'fs';
 import { resolve } from 'path';
 import { parse } from 'csv-parse/sync';
 
+// Load custom fields configuration
+function loadCustomFieldsConfig() {
+  try {
+    const configPath = resolve(__dirname, '../../../core/config/custom-fields.json');
+    const configContent = readFileSync(configPath, 'utf-8');
+    return JSON.parse(configContent);
+  } catch (error) {
+    console.error('⚠️  Error loading custom-fields.json:', error);
+    console.log('   Using fallback configuration');
+    return { fields: [] };
+  }
+}
+
 interface ValidationIssue {
   row: number;
   field: string;
@@ -135,25 +148,18 @@ function validateCSV(filepath: string): ValidationResult {
       }
     }
 
-    // Validation 5: Custom field validation (EXACT Givebutter template names)
-    const customFieldNames = [
-      '📝 Sign Up Complete',
-      '💸 Givebutter Page Setup',
-      '📆 Shift Preference',
-      '👯‍♂️ Partner Preference',
-      '🚂 Mentor Training Complete',
-      '📈 Fully Fundraised?',
-      '📧 Custom Email Message 1️⃣',
-      '📱Custom Text Message 1️⃣',
-    ];
+    // Validation 5: Custom field validation (from config)
+    const customFieldsConfig = loadCustomFieldsConfig();
+    const customFields = customFieldsConfig.fields || [];
 
-    customFieldNames.forEach(name => {
+    customFields.forEach((field: any) => {
+      const name = field.name;
       if (record[name]) {
         const value = record[name];
 
         // Validate Yes/No fields
-        if (['📝 Sign Up Complete', '🎨 Givebutter Page Setup', '🏋️ Mentor Training Complete', '📈 Fully Fundraised?'].includes(name)) {
-          if (value !== 'Yes' && value !== 'No') {
+        if (field.type === 'yes_no') {
+          if (value !== 'Yes' && value !== 'No' && value !== '') {
             issues.push({
               row: rowNum,
               field: name,
@@ -163,24 +169,25 @@ function validateCSV(filepath: string): ValidationResult {
           }
         }
 
-        // Validate length (skip for message fields which can be longer)
-        const messageFields = ['📧 Custom Email Message 1️⃣', '📱Custom Text Message 1️⃣'];
-        if (!messageFields.includes(name) && value.length > 255) {
+        // Validate length (skip for message/text fields which can be longer)
+        if (field.type === 'text' && field.source === 'generated') {
+          // This is a message field - allow longer content
+          const maxLength = field.max_length || 2000;
+          if (value.length > maxLength) {
+            issues.push({
+              row: rowNum,
+              field: name,
+              issue: `Message exceeds max length of ${maxLength} chars (${value.length} chars)`,
+              severity: 'warning',
+            });
+          }
+        } else if (field.type === 'text' && value.length > 255) {
+          // Regular text field - enforce 255 char limit
           issues.push({
             row: rowNum,
             field: name,
             issue: `Exceeds 255 character limit (${value.length} chars)`,
             severity: 'error',
-          });
-        }
-
-        // Warn if message fields are excessively long (over 2000 chars)
-        if (messageFields.includes(name) && value.length > 2000) {
-          issues.push({
-            row: rowNum,
-            field: name,
-            issue: `Message is very long (${value.length} chars) - consider shortening`,
-            severity: 'warning',
           });
         }
       }

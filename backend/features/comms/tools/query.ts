@@ -11,7 +11,7 @@
  * Modify the QUERY section to test different filters.
  *
  * Usage:
- *   npx tsx backend/features/text-messages/query-mentors.ts
+ *   npx tsx backend/features/comms/tools/query.ts
  */
 
 import { createClient } from '@supabase/supabase-js';
