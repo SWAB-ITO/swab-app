@@ -281,47 +281,10 @@ export function ConfigWizard({
             {description && <CardDescription>{description}</CardDescription>}
           </div>
 
-          {/* Step Indicator */}
-          {showStepIndicator && (
-            <div className="flex items-center justify-between">
-              <div className="text-sm font-medium text-muted-foreground">
-                Step {currentStep + 1} of {steps.length}
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {step.title}
-              </div>
-            </div>
-          )}
-
           {/* Progress Bar */}
           {showProgress && (
             <Progress value={progress} className="h-2" />
           )}
-
-          {/* Step Navigation Dots */}
-          <div className="flex items-center gap-2">
-            {steps.map((s, index) => {
-              const isClickable = index <= currentStep + 1;
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => goToStep(index)}
-                  disabled={!isClickable}
-                  className={`h-2 rounded-full transition-all ${
-                    index === currentStep
-                      ? 'bg-primary w-8'
-                      : index < currentStep
-                      ? 'bg-primary/60 w-2 cursor-pointer hover:bg-primary/80'
-                      : index === currentStep + 1
-                      ? 'bg-muted w-2 cursor-pointer hover:bg-muted-foreground/30'
-                      : 'bg-muted/40 w-2 cursor-not-allowed'
-                  }`}
-                  aria-label={`${isClickable ? 'Go to' : 'Locked'} step ${index + 1}: ${s.title}`}
-                  aria-disabled={!isClickable}
-                />
-              );
-            })}
-          </div>
         </div>
       </CardHeader>
 
@@ -347,40 +310,33 @@ export function ConfigWizard({
         )}
 
         {/* Navigation Buttons */}
-        {!isLastStep && (
-          <div className="flex items-center justify-between pt-4 border-t">
-            <Button
-              variant="outline"
-              onClick={handlePrevious}
-              disabled={isFirstStep}
-            >
-              <ChevronLeft className="h-4 w-4 mr-2" />
-              Previous
-            </Button>
+        <div className="flex items-center justify-between pt-4 border-t">
+          <Button
+            variant="outline"
+            onClick={handlePrevious}
+            disabled={isFirstStep}
+          >
+            <ChevronLeft className="h-4 w-4 mr-2" />
+            Previous
+          </Button>
 
+          {step.optional && !isLastStep && (
             <div className="text-sm text-muted-foreground">
-              {step.optional && '(Optional)'}
+              (Optional)
             </div>
+          )}
 
-            <Button
-              onClick={handleNext}
-            >
+          {!isLastStep ? (
+            <Button onClick={handleNext}>
               Next
               <ChevronRight className="h-4 w-4 ml-2" />
             </Button>
-          </div>
-        )}
-        {isLastStep && (
-          <div className="flex items-center justify-start pt-4 border-t">
-            <Button
-              variant="outline"
-              onClick={handlePrevious}
-            >
-              <ChevronLeft className="h-4 w-4 mr-2" />
-              Previous
-            </Button>
-          </div>
-        )}
+          ) : (
+            // On the last step, there's no "Next" button, 
+            // the primary actions are inside the step component itself.
+            <div></div> 
+          )}
+        </div>
       </CardContent>
     </Card>
   );

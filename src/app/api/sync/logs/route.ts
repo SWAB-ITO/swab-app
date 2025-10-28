@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ logs: data || [] });
     } else if (type === 'errors') {
       const { data, error } = await supabase
-        .from('mn_errors')
+        .from('sync_errors')
         .select('*')
         .eq('resolved', false)
         .order('created_at', { ascending: false })

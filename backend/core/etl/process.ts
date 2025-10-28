@@ -122,6 +122,7 @@ interface RawTrainingSignup {
   submission_id: string;
   email?: string;
   phone?: string;
+  uga_class?: string;
   session_date?: string;
   session_time?: string;
   submitted_at?: string;
@@ -207,6 +208,42 @@ interface MentorError {
 }
 
 // Note: normalizePhone and normalizeEmail are imported from lib/utils/validators.ts
+
+/**
+ * HELPER: Normalize UGA class to match Givebutter dropdown options exactly
+ * Givebutter options: "Freshman", "Sophomore", "Junior", "Senior", "Grad. Student"
+ */
+function normalizeUgaClass(ugaClass?: string): string | undefined {
+  if (!ugaClass) return undefined;
+
+  const normalized = ugaClass.trim();
+
+  // Map common variations to exact Givebutter values
+  const classMap: Record<string, string> = {
+    // Exact matches (case-insensitive)
+    'freshman': 'Freshman',
+    'sophomore': 'Sophomore',
+    'junior': 'Junior',
+    'senior': 'Senior',
+    'grad student': 'Grad. Student',  // Normalize to include period
+    'grad. student': 'Grad. Student',  // Keep period from Jotform
+    'graduate student': 'Grad. Student',
+    'graduate': 'Grad. Student',
+    'grad': 'Grad. Student',
+    // Handle ordinal variations
+    '1st year': 'Freshman',
+    '2nd year': 'Sophomore',
+    '3rd year': 'Junior',
+    '4th year': 'Senior',
+    'first year': 'Freshman',
+    'second year': 'Sophomore',
+    'third year': 'Junior',
+    'fourth year': 'Senior',
+  };
+
+  const mapped = classMap[normalized.toLowerCase()];
+  return mapped || normalized; // Return original if no mapping found
+}
 
 function buildFullName(signup: RawSignup): string {
   const displayName = signup.preferred_name?.trim() || signup.first_name;
@@ -491,6 +528,8 @@ function processMentorSignup(
     rawMembers: RawMember[];
     existingContactIds: Map<string, number>;
     existingMemberIds: Map<string, number>;
+    existingTrainingDone: Map<string, boolean>;
+    existingTrainingAt: Map<string, string | null>;
   },
   errors: MentorError[]
 ): { mentor: Mentor } | null {
@@ -585,13 +624,42 @@ function processMentorSignup(
       });
     }
 
-    if (matchingContacts.length > 0) {
+    // CRITICAL FIX: Filter out contacts that already have a DIFFERENT External ID
+    // These contacts belong to other mentors and should NOT be reused
+    const availableContacts = matchingContacts.filter(c => {
+      // Allow contacts with no External ID (can be claimed)
+      if (!c.external_id) return true;
+
+      // Allow contacts with matching External ID (already ours)
+      if (c.external_id === signup.mn_id) return true;
+
+      // REJECT contacts with different External ID (belong to someone else)
+      // Log as warning for visibility
+      if (c.external_id !== signup.mn_id) {
+        errors.push({
+          mn_id: signup.mn_id,
+          error_type: 'external_id_conflict_skipped',
+          error_message: `Skipped contact ${c.contact_id} (has External ID ${c.external_id}, need ${signup.mn_id}). Will create new contact.`,
+          severity: 'info',
+          source_table: 'raw_gb_full_contacts',
+          raw_data: {
+            contact_id: c.contact_id,
+            existing_external_id: c.external_id,
+            expected_external_id: signup.mn_id,
+          },
+        });
+        return false;
+      }
+
+      return true;
+    });
+
+    if (availableContacts.length > 0) {
       // Smart matching when there are multiple contacts
       // Priority:
       // 1. Contact with phone number (junk duplicates have null phones)
       // 2. Contact with real name (not auto-generated "F.XXXXX L.XXXXX")
       // 3. Newest contact (highest ID)
-      // Note: External ID priority removed since we already checked that above
 
       const isJunkContact = (c: RawContact) => {
         const firstName = c.first_name || '';
@@ -600,7 +668,7 @@ function processMentorSignup(
         return /^F\.\d+\.\d+$/.test(firstName) && /^L\.\d+\.\d+$/.test(lastName);
       };
 
-      matchingContacts.sort((a, b) => {
+      availableContacts.sort((a, b) => {
         // 1. Prefer contact with phone number
         const aHasPhone = !!a.primary_phone;
         const bHasPhone = !!b.primary_phone;
@@ -617,34 +685,21 @@ function processMentorSignup(
         return b.contact_id - a.contact_id;
       });
 
-      gbContactId = matchingContacts[0].contact_id;
+      gbContactId = availableContacts[0].contact_id;
       // Check for "Dropped 25" tag
-      hasDroppedTag = matchingContacts[0].tags?.includes('Dropped 25') || false;
+      hasDroppedTag = availableContacts[0].tags?.includes('Dropped 25') || false;
 
-      // Warn if matched contact has a DIFFERENT External ID
-      if (matchingContacts[0].external_id && matchingContacts[0].external_id !== signup.mn_id) {
-        errors.push({
-          mn_id: signup.mn_id,
-          error_type: 'external_id_conflict',
-          error_message: `Matched contact ${gbContactId} has different External ID: ${matchingContacts[0].external_id}`,
-          severity: 'error',
-          source_table: 'raw_gb_full_contacts',
-          raw_data: {
-            matched_contact_id: gbContactId,
-            existing_external_id: matchingContacts[0].external_id,
-            expected_external_id: signup.mn_id,
-          },
-        });
-      }
+      // NOTE: No longer need to check for External ID conflicts here
+      // because we already filtered them out in availableContacts above
 
-      if (matchingContacts.length > 1) {
+      if (availableContacts.length > 1) {
         errors.push({
           mn_id: signup.mn_id,
           error_type: 'multiple_contacts',
-          error_message: `Found ${matchingContacts.length} Givebutter contacts (phone/email) - selected ${gbContactId}`,
+          error_message: `Found ${availableContacts.length} available Givebutter contacts (phone/email) - selected ${gbContactId}`,
           severity: 'warning',
           source_table: 'raw_gb_full_contacts',
-          raw_data: { contacts: matchingContacts.map(c => ({ id: c.contact_id, external_id: c.external_id, has_phone: !!c.primary_phone, is_junk: isJunkContact(c) })) },
+          raw_data: { contacts: availableContacts.map(c => ({ id: c.contact_id, external_id: c.external_id, has_phone: !!c.primary_phone, is_junk: isJunkContact(c) })) },
         });
       }
     }
@@ -718,6 +773,10 @@ function processMentorSignup(
   const preservedContactId = context.existingContactIds.get(signup.mn_id!);
   const preservedMemberId = context.existingMemberIds.get(signup.mn_id!);
 
+  // Preserve existing training data (CRITICAL: Don't overwrite manual training records)
+  const preservedTrainingDone = context.existingTrainingDone.get(signup.mn_id!) ?? false;
+  const preservedTrainingAt = context.existingTrainingAt.get(signup.mn_id!) ?? undefined;
+
   // Build mentor record (includes all data - no separate task table)
   const mentor: Mentor = {
     mn_id: signup.mn_id!,
@@ -734,7 +793,7 @@ function processMentorSignup(
     uga_email: signup.uga_email,
     gender: signup.gender,
     shirt_size: signup.shirt_size,
-    uga_class: signup.uga_class,
+    uga_class: normalizeUgaClass(trainingSignupMatch?.uga_class || signup.uga_class), // Prefer training signup, normalize to match Givebutter
     shift_preference: undefined, // TODO: Add to Jotform
     partner_preference: undefined, // TODO: Add to Jotform,
     // Fundraising/task data (now merged into mentor)
@@ -743,8 +802,8 @@ function processMentorSignup(
     campaign_joined_at: undefined,  // TODO: Add to raw_gb_campaign_members if needed
     fundraised_done: fundraisedDone,
     fundraised_at: fundraisedDone ? signup.submitted_at : undefined,
-    training_done: false,
-    training_at: undefined,
+    training_done: preservedTrainingDone,
+    training_at: preservedTrainingAt,
     training_signup_done: !!trainingSignupMatch,
     training_signup_at: trainingSignupMatch?.submitted_at,
     training_signup_submission_id: trainingSignupMatch?.submission_id,
@@ -832,16 +891,18 @@ async function etlProcess() {
   console.log(`   Duplicates removed: ${duplicateCount}\n`);
 
   // ============================================================================
-  // STEP 3.5: Load existing mentors to preserve gb_contact_id
+  // STEP 3.5: Load existing mentors to preserve gb_contact_id and training data
   // ============================================================================
-  console.log('📥 Loading existing mentors to preserve contact IDs...\n');
+  console.log('📥 Loading existing mentors to preserve contact IDs and training data...\n');
 
   const { data: existingMentors } = await supabase
     .from('mentors')
-    .select('mn_id, gb_contact_id, gb_member_id');
+    .select('mn_id, gb_contact_id, gb_member_id, training_done, training_at');
 
   const existingContactIds = new Map(existingMentors?.map(m => [m.mn_id, m.gb_contact_id]) || []);
   const existingMemberIds = new Map(existingMentors?.map(m => [m.mn_id, m.gb_member_id]) || []);
+  const existingTrainingDone = new Map(existingMentors?.map(m => [m.mn_id, m.training_done]) || []);
+  const existingTrainingAt = new Map(existingMentors?.map(m => [m.mn_id, m.training_at]) || []);
 
   console.log(`   Found ${existingContactIds.size} existing mentors with data to preserve\n`);
 
@@ -872,6 +933,8 @@ async function etlProcess() {
     rawMembers: rawMembers as RawMember[] || [],
     existingContactIds,
     existingMemberIds,
+    existingTrainingDone,
+    existingTrainingAt,
   };
 
   // Process each signup using helper function

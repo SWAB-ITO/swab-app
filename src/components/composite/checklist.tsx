@@ -51,7 +51,7 @@ export interface ChecklistProps {
    * Visual variant
    * @default 'default'
    */
-  variant?: 'default' | 'compact';
+  variant?: 'default' | 'compact' | 'card';
 
   /**
    * Additional CSS classes
@@ -104,6 +104,54 @@ export function Checklist({
   const progressPercentage = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const isCompact = variant === 'compact';
+  const isCard = variant === 'card';
+
+  if (isCard) {
+    return (
+      <div className={cn('bg-muted/30 rounded-lg p-6 space-y-4', className)}>
+        {(title || showProgress) && (
+          <div className="space-y-2">
+            {title && (
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">{title}</h3>
+                {showProgress && (
+                  <span className="text-sm text-muted-foreground">
+                    ({completedCount}/{totalCount})
+                  </span>
+                )}
+              </div>
+            )}
+            {showProgress && (
+              <div className="w-full bg-muted rounded-full h-2">
+                <div
+                  className={cn(
+                    'h-2 rounded-full transition-all duration-300',
+                    progressPercentage === 100 ? 'bg-success-DEFAULT' : 'bg-info-DEFAULT'
+                  )}
+                  style={{ width: `${progressPercentage}%` }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+        <ul className="space-y-3" role="list">
+          {items.map((item) => (
+            <li key={item.id} className="flex items-center gap-3">
+              {item.completed ? (
+                <CheckCircle className="flex-shrink-0 text-success-DEFAULT h-5 w-5" />
+              ) : (
+                <Circle className="flex-shrink-0 text-muted-foreground h-5 w-5" />
+              )}
+              <span className={cn('font-medium', !item.completed && 'text-muted-foreground')}>
+                {item.label}
+                {item.required && <span className="text-error-text ml-1">*</span>}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )
+  }
 
   return (
     <div className={cn('space-y-4', className)}>

@@ -9,6 +9,7 @@ import { StatusBadge } from '@/components/composite/status-badge';
 import { StatCard } from '@/components/composite/stat-card';
 import { SyncActionCard } from '@/components/features/sync/sync-action-card';
 import { SyncLogList, SyncLog as SyncLogType } from '@/components/features/sync/sync-log-list';
+import { ErrorLogList, ConflictError } from '@/components/features/sync/error-log-list';
 import { Settings, Upload, RefreshCw, AlertCircle, CheckCircle, Clock, FileText } from 'lucide-react';
 
 interface InitStatus {
@@ -18,15 +19,6 @@ interface InitStatus {
 }
 
 // Using SyncLog type from SyncLogList component
-
-interface ConflictError {
-  error_id: string;
-  mn_id?: string;
-  error_type: string;
-  error_message: string;
-  severity: string;
-  created_at: string;
-}
 
 export default function SyncDashboard() {
   const [initStatus, setInitStatus] = useState<InitStatus | null>(null);
@@ -189,10 +181,10 @@ export default function SyncDashboard() {
 
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-info/5 via-background to-primary/5">
+    <div className="min-h-screen bg-muted/20">
       <div className="container mx-auto p-6 md:p-8 max-w-7xl">
         {/* Header */}
-        <div className="mb-12">
+        <div className="mb-10">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
             <div>
               <div className="inline-block mb-3">
@@ -204,7 +196,7 @@ export default function SyncDashboard() {
                 Sync Dashboard
               </h1>
               <p className="text-muted-foreground text-xl md:text-2xl font-light max-w-2xl">
-                Monitor and manage data synchronization from all sources
+                Run syncs and monitor status.
               </p>
             </div>
             <Link href="/settings?tab=api-config">
@@ -217,15 +209,15 @@ export default function SyncDashboard() {
         </div>
 
         {/* System Status Section */}
-        <section className="mb-14">
-          <div className="mb-8">
+        <section className="mb-12">
+          <div className="mb-6">
             <h2 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
               <div className="w-1 h-8 bg-info-DEFAULT rounded-full"></div>
               System Status
             </h2>
-            <p className="text-muted-foreground text-base ml-7">Current system configuration and sync status</p>
+            <p className="text-muted-foreground text-base ml-7">System configuration and status.</p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatCard
             title="System Status"
             value={initStatus?.initialized ? 'Initialized' : 'Not Configured'}
@@ -258,15 +250,15 @@ export default function SyncDashboard() {
       </section>
 
       {/* Sync Operations Section */}
-      <section className="mb-14">
-        <div className="mb-8">
+      <section className="mb-12">
+        <div className="mb-6">
           <h2 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
             <div className="w-1 h-8 bg-primary rounded-full"></div>
             Sync Operations
           </h2>
-          <p className="text-muted-foreground text-base ml-7">Run data synchronization tasks</p>
+          <p className="text-muted-foreground text-base ml-7">Run synchronization tasks.</p>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <SyncActionCard
           icon={RefreshCw}
           title="Periodic Sync"
@@ -304,13 +296,13 @@ export default function SyncDashboard() {
       </section>
 
       {/* Recent Activity Section */}
-      <section className="mb-14">
-        <div className="mb-8">
+      <section className="mb-12">
+        <div className="mb-6">
           <h2 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
             <div className="w-1 h-8 bg-success-DEFAULT rounded-full"></div>
             Recent Activity
           </h2>
-          <p className="text-muted-foreground text-base ml-7">View recent sync operations and their status</p>
+          <p className="text-muted-foreground text-base ml-7">Recent sync operations.</p>
         </div>
         <SyncLogList
           logs={syncLogs}
@@ -320,54 +312,14 @@ export default function SyncDashboard() {
 
       {/* Errors & Conflicts Section */}
       <section>
-        <div className="mb-8">
+        <div className="mb-6">
           <h2 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
             <div className="w-1 h-8 bg-error-DEFAULT rounded-full"></div>
             Errors & Conflicts
           </h2>
-          <p className="text-muted-foreground text-base ml-7">Review and resolve data conflicts</p>
+          <p className="text-muted-foreground text-base ml-7">Review and resolve conflicts.</p>
         </div>
-        <Card className="border-border/40">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Active Issues
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-          {errors.length === 0 ? (
-            <div className="text-center py-12">
-              <CheckCircle className="h-12 w-12 text-success-DEFAULT mx-auto mb-3 opacity-50" />
-              <p className="text-muted-foreground text-base font-medium">No unresolved errors</p>
-              <p className="text-muted-foreground text-sm mt-1">All systems operating normally</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {errors.map((error, index) => (
-                <div key={error.error_id || `error-${index}`} className="bg-gradient-to-br from-error-DEFAULT/5 to-muted/30 rounded-xl p-5 border border-error-DEFAULT/20 hover:border-error-DEFAULT/40 transition-colors">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <AlertCircle className="h-5 w-5 text-error-DEFAULT flex-shrink-0" />
-                        <span className="font-semibold text-foreground text-base">{error.error_type.replace(/_/g, ' ')}</span>
-                        <StatusBadge severity={error.severity as 'info' | 'warning' | 'error' | 'critical'} />
-                      </div>
-                      {error.mn_id && (
-                        <p className="text-sm text-muted-foreground mb-2 ml-8">Mentor ID: {error.mn_id}</p>
-                      )}
-                      <p className="text-sm text-foreground/90 ml-8">{error.error_message}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground mt-3 ml-8">
-                    <Clock className="h-3 w-3" />
-                    {new Date(error.created_at).toLocaleString()}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          </CardContent>
-        </Card>
+        <ErrorLogList errors={errors} />
       </section>
       </div>
     </div>

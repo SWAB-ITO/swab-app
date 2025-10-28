@@ -11,12 +11,12 @@ import dotenv from 'dotenv';
 import { resolve } from 'path';
 import { createClient } from '@supabase/supabase-js';
 import { getSupabaseConfig } from '../config/supabase';
+import { loadSyncConfigFromEnv } from '../../../src/lib/server/config/sync-config-loader';
 
 // Load .env.local
 dotenv.config({ path: resolve(process.cwd(), '.env.local') });
 
 const API_KEY = process.env.JOTFORM_API_KEY;
-const SIGNUP_FORM_ID = process.env.JOTFORM_SIGNUP_FORM_ID || '250685983663169';
 
 interface JotformAnswer {
   name?: string;
@@ -110,6 +110,11 @@ async function syncSignups() {
     process.exit(1);
   }
 
+  // Load sync configuration from database
+  console.log('📋 Loading sync configuration...');
+  const syncConfig = await loadSyncConfigFromEnv(2025);
+  console.log(`✅ Loaded config for year 2025\n`);
+
   // Initialize Supabase
   const config = getSupabaseConfig();
   const supabase = createClient(config.url, config.serviceRoleKey || config.anonKey);
@@ -118,8 +123,8 @@ async function syncSignups() {
 
   try {
     // Fetch all submissions (Jotform returns 1000 max, pagination if needed)
-    console.log(`🔍 Fetching submissions from form ${SIGNUP_FORM_ID}...`);
-    const submissions = await fetchJotform(`/form/${SIGNUP_FORM_ID}/submissions?limit=1000`) as JotformSubmission[];
+    console.log(`🔍 Fetching submissions from form ${syncConfig.jotformSignupFormId}...`);
+    const submissions = await fetchJotform(`/form/${syncConfig.jotformSignupFormId}/submissions?limit=1000`) as JotformSubmission[];
 
     console.log(`✅ Found ${submissions.length} submissions\n`);
 

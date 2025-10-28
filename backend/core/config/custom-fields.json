@@ -7,12 +7,20 @@
       "id": "setup_complete",
       "name": "💸 Givebutter Page Setup",
       "type": "yes_no",
-      "description": "Has the mentor completed the setup form?",
-      "source": "mentors.setup_submission_id",
+      "description": "Has the mentor created a Givebutter fundraising page? (Based on campaign membership)",
+      "source": "mentors.gb_member_id",
       "mapping": {
         "true": "Yes",
         "false": "No"
       }
+    },
+    {
+      "id": "uga_class",
+      "name": "🎓 UGA Class",
+      "type": "single_select",
+      "description": "Mentor's UGA class year - must match Givebutter dropdown options exactly",
+      "source": "mentors.uga_class",
+      "allowed_values": ["Freshman", "Sophomore", "Junior", "Senior", "Grad. Student"]
     },
     {
       "id": "shift_preference",

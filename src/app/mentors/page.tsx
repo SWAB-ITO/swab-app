@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -13,7 +13,7 @@ import {
   getSortedRowModel,
   useReactTable,
 } from '@tanstack/react-table';
-import { ArrowUpDown, MoreHorizontal, Search, Check, ChevronsUpDown } from 'lucide-react';
+import { ArrowUpDown, MoreHorizontal, Check, Download } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -52,19 +52,28 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { DataTableToolbar } from '@/components/composite/data-table-toolbar';
+import { StatusBadge } from '@/components/composite/status-badge';
+import { DataTablePagination } from '@/components/composite/data-table-pagination';
+import { MentorDetailsDialog } from '@/components/features/mentors/mentor-details-dialog';
 
 interface Mentor {
   mn_id: string;
   first_name: string;
   last_name: string;
+  middle_name?: string;
+  preferred_name?: string;
   personal_email?: string;
   uga_email?: string;
   phone: string;
-  status_category?: string;
+  status_category?: 'active' | 'limbo' | 'dropped';
+  shift_preference?: string;
+  partner_preference?: string;
   fundraising_page_url?: string;
   gb_contact_id?: string;
   amount_raised?: number;
+  fundraised_at?: string;
+  fundraising_done?: boolean;
   training_done?: boolean;
   training_at?: string;
   notes?: string;
@@ -77,14 +86,20 @@ export default function MentorsPage() {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
-  const [selectedMentor, setSelectedMentor] = useState<Mentor | null>(null);
+  const [globalFilter, setGlobalFilter] = useState('');
+  const [selectedMentor, setSelectedMentor] = useState<Partial<Mentor> | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [focusSearch, setFocusSearch] = useState(false);
   const [searchResults, setSearchResults] = useState<Mentor[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchValue, setSearchValue] = useState('');
-  const [checkingIn, setCheckingIn] = useState(false);
   const [justCheckedIn, setJustCheckedIn] = useState(false);
   const [notes, setNotes] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editableMentor, setEditableMentor] = useState<Partial<Mentor> | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const checkInSearchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadMentors();
@@ -135,79 +150,157 @@ export default function MentorsPage() {
   const handleSelectMentor = (mentor: Mentor) => {
     setSelectedMentor(mentor);
     setNotes(mentor.notes || '');
+    setEditableMentor(mentor);
     setDialogOpen(true);
     setSearchOpen(false);
     setSearchValue('');
     setSearchResults([]);
     setJustCheckedIn(false);
+    setIsEditing(false);
   };
 
-  const handleCheckIn = async () => {
-    if (!selectedMentor) return;
-
-    setCheckingIn(true);
+  const handleCheckIn = async (mnId: string) => {
     try {
       const response = await fetch('/api/mentors/checkin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mn_id: selectedMentor.mn_id,
-          notes: notes.trim() || null
-        }),
+        body: JSON.stringify({ mn_id: mnId }),
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        setSelectedMentor(data.mentor);
-        setJustCheckedIn(true);
-        // Refresh the mentor list to show updated status
-        loadMentors();
+      if (!response.ok) throw new Error('Failed to check in');
+      const result = await response.json();
+      const updatedIndex = mentors.findIndex((m: Mentor) => m.mn_id === result.mentor.mn_id);
+      if (updatedIndex > -1) {
+          const newMentors = [...mentors];
+          newMentors[updatedIndex] = result.mentor;
+          setMentors(newMentors);
+          setSelectedMentor(result.mentor);
       }
     } catch (error) {
-      console.error('Error checking in mentor:', error);
-    } finally {
-      setCheckingIn(false);
+      console.error('Error checking in:', error);
     }
   };
 
-  const handleUndoCheckIn = async () => {
-    if (!selectedMentor) return;
-
-    setCheckingIn(true);
+  const handleUndoCheckIn = async (mnId: string) => {
     try {
       const response = await fetch('/api/mentors/checkin', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mn_id: selectedMentor.mn_id
-        }),
+        body: JSON.stringify({ mn_id: mnId }),
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        setSelectedMentor(data.mentor);
-        // Refresh the mentor list to show updated status
-        loadMentors();
+      if (!response.ok) throw new Error('Failed to undo check in');
+      const result = await response.json();
+      const updatedIndex = mentors.findIndex((m: Mentor) => m.mn_id === result.mentor.mn_id);
+      if (updatedIndex > -1) {
+          const newMentors = [...mentors];
+          newMentors[updatedIndex] = result.mentor;
+          setMentors(newMentors);
+          setSelectedMentor(result.mentor);
       }
     } catch (error) {
-      console.error('Error undoing check-in:', error);
-    } finally {
-      setCheckingIn(false);
+      console.error('Error undoing check in:', error);
     }
   };
 
-  const handleNextPerson = () => {
+  const handleNextMentor = () => {
     setDialogOpen(false);
     setSelectedMentor(null);
-    setJustCheckedIn(false);
-    setNotes('');
     setSearchValue('');
+    setSearchResults([]);
     setSearchOpen(true);
+    setFocusSearch(true);
   };
+
+  useEffect(() => {
+    if (focusSearch && searchOpen) {
+      // Focus on check-in search after popover opens
+      setTimeout(() => {
+        const input = document.querySelector('[placeholder="Type last 4 digits of phone..."]') as HTMLInputElement;
+        input?.focus();
+        setFocusSearch(false);
+      }, 100);
+    }
+  }, [focusSearch, searchOpen]);
 
   const handleViewDetails = (mentor: Mentor) => {
     setSelectedMentor(mentor);
+    setNotes(mentor.notes || '');
+    // Initialize editableMentor with a full copy, including new fields
+    setEditableMentor({
+      ...mentor,
+      fundraising_done: !!mentor.fundraised_at,
+    });
     setDialogOpen(true);
+    setJustCheckedIn(false);
+    setIsEditing(false);
+  };
+
+  const handleUpdateMentor = async (updatedMentor: Partial<Mentor>) => {
+    if (!updatedMentor.mn_id) return;
+    try {
+      const response = await fetch(`/api/mentors/${updatedMentor.mn_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedMentor),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update mentor');
+      }
+
+      const result = await response.json();
+      const updatedIndex = mentors.findIndex((m: Mentor) => m.mn_id === result.mentor.mn_id);
+      if (updatedIndex > -1) {
+        const newMentors = [...mentors];
+        newMentors[updatedIndex] = result.mentor;
+        setMentors(newMentors);
+      }
+      setDialogOpen(false);
+    } catch (error) {
+      console.error('Error updating mentor:', error);
+    }
+  };
+
+  const handleExportGBImport = async () => {
+    setIsExporting(true);
+    try {
+      const response = await fetch('/api/mentors/gb-import');
+
+      if (!response.ok) {
+        // Try to get the error message from the response
+        let errorMessage = 'Failed to export GB import data';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch {
+          // If response is not JSON, use default message
+        }
+        throw new Error(errorMessage);
+      }
+
+      // Get the blob and trigger download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+
+      // Extract filename from Content-Disposition header or use default
+      const contentDisposition = response.headers.get('Content-Disposition');
+      const filename = contentDisposition
+        ? contentDisposition.split('filename=')[1]?.replace(/"/g, '')
+        : `givebutter-import-${new Date().toISOString().split('T')[0]}.csv`;
+
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error exporting GB import:', error);
+      const message = error instanceof Error ? error.message : 'Failed to export Givebutter import file. Please try again.';
+      alert(message);
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const columns: ColumnDef<Mentor>[] = [
@@ -264,7 +357,7 @@ export default function MentorsPage() {
     },
     {
       accessorKey: 'amount_raised',
-      header: () => <div className="text-right">Amount Raised</div>,
+      header: () => <div className="text-right">Raised</div>,
       cell: ({ row }) => {
         const amount = row.getValue('amount_raised') as number | null;
         const formatted = amount
@@ -280,10 +373,15 @@ export default function MentorsPage() {
       accessorKey: 'status_category',
       header: 'Status',
       cell: ({ row }) => {
-        const status = row.getValue('status_category') as string;
+        const status = row.getValue('status_category') as Mentor['status_category'];
+        const statusMap: Record<NonNullable<Mentor['status_category']>, 'completed' | 'failed' | 'pending'> = {
+          'active': 'completed',
+          'dropped': 'failed',
+          'limbo': 'pending'
+        }
         return (
           <div className="capitalize">
-            <span className="px-2 py-1 rounded-full text-xs bg-muted">{status || 'active'}</span>
+            <StatusBadge status={status ? statusMap[status] : 'completed'} />
           </div>
         );
       },
@@ -322,35 +420,68 @@ export default function MentorsPage() {
   const table = useReactTable({
     data: mentors,
     columns,
-    onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
-    getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-    onColumnVisibilityChange: setColumnVisibility,
     state: {
       sorting,
       columnFilters,
       columnVisibility,
+      globalFilter,
+    },
+    onSortingChange: setSorting,
+    onColumnFiltersChange: setColumnFilters,
+    onColumnVisibilityChange: setColumnVisibility,
+    onGlobalFilterChange: setGlobalFilter,
+    globalFilterFn: (row, _columnId, filterValue) => {
+      const searchValue = filterValue.toLowerCase();
+      const mentor = row.original as Mentor;
+
+      // Search across name, email, and phone
+      return (
+        mentor.first_name?.toLowerCase().includes(searchValue) ||
+        mentor.last_name?.toLowerCase().includes(searchValue) ||
+        mentor.personal_email?.toLowerCase().includes(searchValue) ||
+        mentor.uga_email?.toLowerCase().includes(searchValue) ||
+        mentor.phone?.toLowerCase().includes(searchValue) ||
+        false
+      );
+    },
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    meta: {
+      selectMentor: (mentor: Mentor) => {
+        setSelectedMentor(mentor);
+        setDialogOpen(true);
+      },
     },
   });
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-accent/5">
+    <div className="min-h-screen bg-muted/20">
       <div className="container mx-auto p-6 md:p-8 max-w-7xl">
         {/* Header */}
-        <div className="mb-12">
-          <div className="inline-block mb-4">
-            <span className="text-sm font-semibold text-primary bg-primary/10 px-4 py-2 rounded-full border border-primary/20">
-              Mentor Management
-            </span>
+        <div className="mb-10">
+          <div className="flex items-center justify-between mb-4">
+            <div className="inline-block">
+              <span className="text-sm font-semibold text-primary bg-primary/10 px-4 py-2 rounded-full border border-primary/20">
+                Mentor Management
+              </span>
+            </div>
+            <Button
+              onClick={handleExportGBImport}
+              disabled={isExporting}
+              variant="outline"
+              className="gap-2"
+            >
+              <Download className="h-4 w-4" />
+              {isExporting ? 'Exporting...' : 'Export for Givebutter'}
+            </Button>
           </div>
           <h1 className="text-5xl md:text-6xl font-bold tracking-tight mb-4 bg-gradient-to-r from-foreground via-foreground to-foreground/70 bg-clip-text">
             Mentors
           </h1>
           <p className="text-muted-foreground text-xl md:text-2xl font-light max-w-2xl">
-            Search, view, and manage mentor information
+            Search, view, and manage all mentor records.
           </p>
         </div>
 
@@ -366,7 +497,7 @@ export default function MentorsPage() {
                   className="w-full justify-between h-14 text-base shadow-sm hover:shadow-md transition-all"
                 >
                   {searchValue || "Type phone number to check in..."}
-                  <Search className="ml-2 h-5 w-5 shrink-0 opacity-50" />
+                  {/* <Search className="ml-2 h-5 w-5 shrink-0 opacity-50" /> */}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[600px] p-0" align="center">
@@ -403,7 +534,7 @@ export default function MentorsPage() {
                                 </span>
                               )}
                             </div>
-                            <Check className="h-4 w-4 opacity-0" />
+                            {/* <Check className="h-4 w-4 opacity-0" /> */}
                           </CommandItem>
                         ))}
                       </CommandGroup>
@@ -429,6 +560,9 @@ export default function MentorsPage() {
         {/* Table Section */}
         <section>
           <div className="rounded-lg border border-border/40 bg-card overflow-hidden">
+            <div className="p-4 border-b">
+              <DataTableToolbar table={table} searchInputRef={searchInputRef} />
+            </div>
             <Table>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (
@@ -488,212 +622,20 @@ export default function MentorsPage() {
           </div>
 
           {/* Pagination */}
-          <div className="flex items-center justify-between space-x-2 py-4">
-            <div className="text-muted-foreground text-sm">
-              Showing {table.getRowModel().rows.length} of {mentors.length} mentor(s)
-            </div>
-            <div className="space-x-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => table.previousPage()}
-                disabled={!table.getCanPreviousPage()}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => table.nextPage()}
-                disabled={!table.getCanNextPage()}
-              >
-                Next
-              </Button>
-            </div>
+          <div className="py-4">
+            <DataTablePagination table={table} />
           </div>
         </section>
 
-        {/* Training Check-In Dialog */}
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="sm:max-w-[500px]">
-            {selectedMentor && (
-              <>
-                {!justCheckedIn ? (
-                  <>
-                    <DialogHeader>
-                      <DialogTitle className="text-2xl">Training Check-In</DialogTitle>
-                      <DialogDescription>
-                        Confirm attendance for mentor training
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="py-6 space-y-6">
-                      {/* Mentor Info - Big and Clear */}
-                      <div className="text-center space-y-2 p-6 bg-muted/50 rounded-lg">
-                        <h2 className="text-3xl font-bold">
-                          {selectedMentor.first_name} {selectedMentor.last_name}
-                        </h2>
-                        <p className="text-xl font-mono text-muted-foreground">
-                          {selectedMentor.phone}
-                        </p>
-                      </div>
-
-                      {/* Fundraising Status */}
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="p-4 rounded-lg border bg-card">
-                          <Label className="text-xs text-muted-foreground">Fundraising Page</Label>
-                          <div className="mt-1">
-                            {selectedMentor.campaign_member ? (
-                              <div className="flex items-center gap-2">
-                                <span className="text-green-600">✓</span>
-                                <span className="text-sm font-medium">Active</span>
-                              </div>
-                            ) : (
-                              <span className="text-sm text-muted-foreground">Not Set Up</span>
-                            )}
-                          </div>
-                          {selectedMentor.fundraising_page_url && (
-                            <a
-                              href={selectedMentor.fundraising_page_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-xs text-primary hover:underline mt-2 block truncate"
-                            >
-                              View Page
-                            </a>
-                          )}
-                        </div>
-                        <div className="p-4 rounded-lg border bg-card">
-                          <Label className="text-xs text-muted-foreground">Amount Raised</Label>
-                          <p className="text-2xl font-bold mt-1">
-                            {new Intl.NumberFormat('en-US', {
-                              style: 'currency',
-                              currency: 'USD',
-                              minimumFractionDigits: 0,
-                            }).format(selectedMentor.amount_raised || 0)}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Training Check-In Status */}
-                      {selectedMentor.training_done ? (
-                        <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-green-100 flex items-center justify-center">
-                              <Check className="h-6 w-6 text-green-600" />
-                            </div>
-                            <div>
-                              <p className="font-semibold text-green-900">Already Checked In</p>
-                              <p className="text-sm text-green-700">
-                                {selectedMentor.training_at &&
-                                  new Date(selectedMentor.training_at).toLocaleString()}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <div className="h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center">
-                              <span className="text-amber-600 text-xl">⏱</span>
-                            </div>
-                            <div>
-                              <p className="font-semibold text-amber-900">Not Checked In</p>
-                              <p className="text-sm text-amber-700">
-                                Click below to mark attendance
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Notes Section */}
-                      <div className="space-y-2">
-                        <Label htmlFor="notes" className="text-base">
-                          Notes {!selectedMentor.training_done && '(Optional)'}
-                        </Label>
-                        <Textarea
-                          id="notes"
-                          placeholder="Add any notes about this check-in (e.g., questions asked, special circumstances, etc.)"
-                          value={notes}
-                          onChange={(e) => setNotes(e.target.value)}
-                          className="min-h-[100px] resize-none"
-                          disabled={selectedMentor.training_done}
-                        />
-                      </div>
-
-                      {/* Action Buttons */}
-                      <div className="space-y-3">
-                        {!selectedMentor.training_done ? (
-                          <Button
-                            onClick={handleCheckIn}
-                            disabled={checkingIn}
-                            className="w-full h-14 text-lg font-semibold"
-                            size="lg"
-                          >
-                            {checkingIn ? 'Checking In...' : 'Check In to Training'}
-                          </Button>
-                        ) : (
-                          <Button
-                            onClick={handleUndoCheckIn}
-                            disabled={checkingIn}
-                            variant="destructive"
-                            className="w-full h-12 text-base"
-                            size="lg"
-                          >
-                            {checkingIn ? 'Undoing Check-In...' : 'Undo Check-In'}
-                          </Button>
-                        )}
-                        <Button
-                          onClick={() => setDialogOpen(false)}
-                          variant="outline"
-                          className="w-full"
-                        >
-                          {selectedMentor.training_done ? 'Close' : 'Cancel'}
-                        </Button>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    {/* Success State */}
-                    <div className="py-8 text-center space-y-6">
-                      <div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-green-100">
-                        <Check className="h-10 w-10 text-green-600" />
-                      </div>
-                      <div>
-                        <h2 className="text-2xl font-bold text-green-900 mb-2">
-                          Check-In Complete!
-                        </h2>
-                        <p className="text-lg text-muted-foreground">
-                          {selectedMentor.first_name} {selectedMentor.last_name}
-                        </p>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          has been marked as attending training
-                        </p>
-                      </div>
-                      <div className="space-y-2 pt-4">
-                        <Button
-                          onClick={handleNextPerson}
-                          className="w-full h-12 text-base"
-                          size="lg"
-                        >
-                          Next Person
-                        </Button>
-                        <Button
-                          onClick={() => setDialogOpen(false)}
-                          variant="outline"
-                          className="w-full"
-                        >
-                          Close
-                        </Button>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </>
-            )}
-          </DialogContent>
-        </Dialog>
+        <MentorDetailsDialog
+          isOpen={dialogOpen}
+          onOpenChange={setDialogOpen}
+          mentor={selectedMentor}
+          onUpdate={handleUpdateMentor}
+          onCheckIn={handleCheckIn}
+          onUndoCheckIn={handleUndoCheckIn}
+          onNext={handleNextMentor}
+        />
       </div>
     </div>
   );

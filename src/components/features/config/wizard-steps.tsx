@@ -10,6 +10,9 @@ import { StatusCard } from '@/components/composite/status-card';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, CheckCircle2, Upload } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { useConfigWizard } from './wizard-context';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 
 // Exported Types
 export interface JotformForm {
@@ -52,32 +55,48 @@ export interface SyncConfig {
 }
 
 // Step 1: API Configuration
-interface ApiConfigStepProps {
-  apiKeys: {
-    jotform: string;
-    givebutter: string;
-  };
-  setApiKeys: (keys: any) => void;
-  storedConfig: SyncConfig | null;
-  apiStatus: ApiStatus;
-  testingApis: boolean;
-  onTestApis: () => void;
-}
+export function ApiConfigStep() {
+  const { state, dispatch } = useConfigWizard();
+  const { apiKeys, storedConfig, apiStatus, testingApis } = state;
 
-export function ApiConfigStep({
-  apiKeys,
-  setApiKeys,
-  storedConfig,
-  apiStatus,
-  testingApis,
-  onTestApis,
-}: ApiConfigStepProps) {
+  const handleTestApis = async () => {
+    dispatch({ type: 'SET_UI_STATE', payload: { key: 'testingApis', value: true } });
+    dispatch({ type: 'SET_API_STATUS', payload: { jotform: null, givebutter: null } });
+
+    try {
+      const jotformKey = apiKeys.jotform || storedConfig?.config?.jotform_api_key;
+      const givebutterKey = apiKeys.givebutter || storedConfig?.config?.givebutter_api_key;
+
+      if (!jotformKey || !givebutterKey) return;
+
+      const response = await fetch('/api/sync/test-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jotform: jotformKey,
+          givebutter: givebutterKey,
+        }),
+      });
+
+      const result = await response.json();
+      dispatch({ type: 'SET_API_STATUS', payload: result });
+
+      if (result.jotform && result.givebutter) {
+        dispatch({ type: 'SET_TESTED_API_KEYS', payload: { jotform: jotformKey, givebutter: givebutterKey } });
+      }
+    } catch (error) {
+      console.error('Error testing APIs:', error);
+      dispatch({ type: 'SET_API_STATUS', payload: { jotform: false, givebutter: false } });
+    } finally {
+      dispatch({ type: 'SET_UI_STATE', payload: { key: 'testingApis', value: false } });
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Status Card */}
       {storedConfig?.configured && storedConfig.config && (
         <StatusCard
-          title="API Configuration"
+          title="Current Configuration"
           configured={storedConfig.configured}
           configuredAt={storedConfig.config.configured_at ? new Date(storedConfig.config.configured_at) : undefined}
           metrics={storedConfig.stats?.map(stat => ({
@@ -89,258 +108,251 @@ export function ApiConfigStep({
         />
       )}
 
-      {/* Jotform API */}
-      <div className="space-y-4">
-        <h4 className="font-semibold text-lg">Jotform API</h4>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="space-y-2">
-          <Label htmlFor="jotform-key">
-            API Key {storedConfig?.configured && <span className="text-success-text text-xs ml-2">(configured)</span>}
-          </Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="jotform-key">Jotform API Key</Label>
+            <div className="flex items-center gap-2">
+              {apiStatus.jotform !== null && (
+                apiStatus.jotform ? <Badge variant="success">Connected</Badge> : <Badge variant="destructive">Failed</Badge>
+              )}
+              {storedConfig?.configured && <Badge variant="outline">Configured</Badge>}
+            </div>
+          </div>
           <Input
             id="jotform-key"
             type="password"
-            placeholder={storedConfig?.configured ? "••••••••••••••••••••••••" : "Enter your Jotform API key"}
+            placeholder="••••••••••••••••••••••••"
             value={apiKeys.jotform}
-            onChange={e => setApiKeys({ ...apiKeys, jotform: e.target.value })}
+            onChange={e => dispatch({ type: 'SET_API_KEY', payload: { key: 'jotform', value: e.target.value } })}
             autoComplete="off"
             data-form-type="other"
           />
           <p className="text-xs text-muted-foreground">
-            {storedConfig?.configured
-              ? 'Leave empty to keep existing key, or enter a new one to update'
-              : 'Get your API key from Jotform → Settings → API'
-            }
+            {storedConfig?.configured ? 'Enter new key to update.' : 'From Jotform → Settings → API.'}
           </p>
         </div>
-      </div>
 
-      <Separator />
-
-      {/* Givebutter API */}
-      <div className="space-y-4">
-        <h4 className="font-semibold text-lg">Givebutter API</h4>
         <div className="space-y-2">
-          <Label htmlFor="givebutter-key">
-            API Key {storedConfig?.configured && <span className="text-success-text text-xs ml-2">(configured)</span>}
-          </Label>
+        <div className="flex items-center justify-between">
+            <Label htmlFor="givebutter-key">Givebutter API Key</Label>
+            <div className="flex items-center gap-2">
+                {apiStatus.givebutter !== null && (
+                    apiStatus.givebutter ? <Badge variant="success">Connected</Badge> : <Badge variant="destructive">Failed</Badge>
+                )}
+                {storedConfig?.configured && <Badge variant="outline">Configured</Badge>}
+            </div>
+          </div>
           <Input
             id="givebutter-key"
             type="password"
-            placeholder={storedConfig?.configured ? "••••••••••••••••••••••••" : "Enter your Givebutter API key"}
+            placeholder="••••••••••••••••••••••••"
             value={apiKeys.givebutter}
-            onChange={e => setApiKeys({ ...apiKeys, givebutter: e.target.value })}
+            onChange={e => dispatch({ type: 'SET_API_KEY', payload: { key: 'givebutter', value: e.target.value } })}
             autoComplete="off"
             data-form-type="other"
           />
           <p className="text-xs text-muted-foreground">
-            {storedConfig?.configured
-              ? 'Leave empty to keep existing key, or enter a new one to update'
-              : 'Get your API key from Givebutter → Settings → API'
-            }
+            {storedConfig?.configured ? 'Enter new key to update.' : 'From Givebutter → Settings → API.'}
           </p>
         </div>
       </div>
 
-      <Separator />
-
-      {/* Test Button */}
-      <div className="space-y-3">
+      <div className="space-y-3 pt-4 border-t">
         <Button
-          onClick={onTestApis}
+          onClick={handleTestApis}
           disabled={testingApis || (!apiKeys.jotform && !storedConfig?.configured) || (!apiKeys.givebutter && !storedConfig?.configured)}
           variant="default"
           size="lg"
           className="w-full"
         >
-          {testingApis ? 'Testing APIs...' : 'Test API Connections'}
+          {testingApis ? 'Testing...' : 'Test Connections'}
         </Button>
-        <p className="text-xs text-muted-foreground text-center">
-          {storedConfig?.configured
-            ? 'Test with stored keys or enter new ones'
-            : 'Test your API keys before proceeding to form selection'
-          }
-        </p>
       </div>
-
-      {/* API Status */}
-      {(apiStatus.jotform !== null || apiStatus.givebutter !== null) && (
-        <Alert>
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Connection Status</AlertTitle>
-          <AlertDescription className="space-y-2">
-            {apiStatus.jotform !== null && (
-              <div className="flex items-center gap-2">
-                <span className={`w-3 h-3 rounded-full ${apiStatus.jotform ? 'bg-success-DEFAULT' : 'bg-error-DEFAULT'}`} />
-                <span className="text-sm">
-                  Jotform: {apiStatus.jotform ? 'Connected ✓' : 'Failed ✗'}
-                </span>
-              </div>
-            )}
-            {apiStatus.givebutter !== null && (
-              <div className="flex items-center gap-2">
-                <span className={`w-3 h-3 rounded-full ${apiStatus.givebutter ? 'bg-success-DEFAULT' : 'bg-error-DEFAULT'}`} />
-                <span className="text-sm">
-                  Givebutter: {apiStatus.givebutter ? 'Connected ✓' : 'Failed ✗'}
-                </span>
-              </div>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
     </div>
   );
 }
 
 // Step 2: Forms Selection
-interface FormsStepProps {
-  apiKeys: {
-    jotformSignupForm: string;
-    jotformSetupForm: string;
-    jotformTrainingSignupForm: string;
-    givebutterCampaign: string;
-  };
-  setApiKeys: (keys: any) => void;
-  jotformForms: JotformForm[];
-  givebutterCampaigns: GivebutterCampaign[];
-  discoveringJotform: boolean;
-  discoveringGivebutter: boolean;
-  onDiscoverJotform: () => void;
-  onDiscoverGivebutter: () => void;
-}
+export function FormsStep() {
+  const { state, dispatch } = useConfigWizard();
+  const { apiKeys, jotformForms, givebutterCampaigns, discoveringJotform, discoveringGivebutter, testedApiKeys, storedConfig } = state;
 
-export function FormsStep({
-  apiKeys,
-  setApiKeys,
-  jotformForms,
-  givebutterCampaigns,
-  discoveringJotform,
-  discoveringGivebutter,
-  onDiscoverJotform,
-  onDiscoverGivebutter,
-}: FormsStepProps) {
+  const handleDiscoverJotform = async () => {
+    const jotformKey = apiKeys.jotform || testedApiKeys.jotform || storedConfig?.config?.jotform_api_key;
+    if (!jotformKey) return;
+
+    dispatch({ type: 'SET_UI_STATE', payload: { key: 'discoveringJotform', value: true } });
+    try {
+      const response = await fetch('/api/sync/discover-jotform', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: jotformKey }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        dispatch({ type: 'SET_JOTFORM_FORMS', payload: data.forms });
+      }
+    } catch (error) {
+      console.error('Error discovering Jotform forms:', error);
+    } finally {
+      dispatch({ type: 'SET_UI_STATE', payload: { key: 'discoveringJotform', value: false } });
+    }
+  };
+
+  const handleDiscoverGivebutter = async () => {
+    const givebutterKey = apiKeys.givebutter || testedApiKeys.givebutter || storedConfig?.config?.givebutter_api_key;
+    if (!givebutterKey) return;
+
+    dispatch({ type: 'SET_UI_STATE', payload: { key: 'discoveringGivebutter', value: true } });
+    try {
+      const response = await fetch('/api/sync/discover-givebutter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: givebutterKey }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        dispatch({ type: 'SET_GIVEBUTTER_CAMPAIGNS', payload: data.campaigns });
+      }
+    } catch (error) {
+      console.error('Error discovering Givebutter campaigns:', error);
+    } finally {
+      dispatch({ type: 'SET_UI_STATE', payload: { key: 'discoveringGivebutter', value: false } });
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Jotform Forms */}
-      <div className="space-y-4">
-        <h4 className="font-semibold text-lg">Jotform Forms</h4>
-        <Button
-          onClick={onDiscoverJotform}
-          disabled={discoveringJotform || jotformForms.length > 0}
-          variant="outline"
-          className="w-full"
-        >
-          {discoveringJotform ? 'Loading Forms...' : jotformForms.length > 0 ? `✓ Loaded ${jotformForms.length} Forms` : 'Discover Available Forms'}
-        </Button>
-
-        {jotformForms.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-            <div className="space-y-2">
-              <FormSelector
-                label="Signup Form"
-                placeholder="Select a form..."
-                options={jotformForms.map(form => ({
-                  id: form.id,
-                  title: form.title,
-                  count: form.count,
-                  status: form.status,
-                }))}
-                value={apiKeys.jotformSignupForm}
-                onChange={value => setApiKeys({ ...apiKeys, jotformSignupForm: value })}
-                searchable
-                required
-                description="Form used for initial mentor signups"
-              />
+      {/* Jotform Forms Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">Jotform Forms</CardTitle>
+              <CardDescription className="text-sm">Select three required forms.</CardDescription>
             </div>
-
-            <div className="space-y-2">
-              <FormSelector
-                label="Setup Form"
-                placeholder="Select a form..."
-                options={jotformForms.map(form => ({
-                  id: form.id,
-                  title: form.title,
-                  count: form.count,
-                  status: form.status,
-                }))}
-                value={apiKeys.jotformSetupForm}
-                onChange={value => setApiKeys({ ...apiKeys, jotformSetupForm: value })}
-                searchable
-                required
-                description="Form for mentor setup and preferences"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <FormSelector
-                label="Training Signup Form"
-                placeholder="Select a form..."
-                options={jotformForms.map(form => ({
-                  id: form.id,
-                  title: form.title,
-                  count: form.count,
-                  status: form.status,
-                }))}
-                value={apiKeys.jotformTrainingSignupForm}
-                onChange={value => setApiKeys({ ...apiKeys, jotformTrainingSignupForm: value })}
-                searchable
-                required
-                description="Form for training session signups"
-              />
-            </div>
+            <Button
+              onClick={handleDiscoverJotform}
+              disabled={discoveringJotform || jotformForms.length > 0}
+              variant="outline"
+            >
+              {discoveringJotform ? 'Loading...' : jotformForms.length > 0 ? `✓ Loaded ${jotformForms.length}` : 'Load Forms'}
+            </Button>
           </div>
+        </CardHeader>
+        {jotformForms.length > 0 && (
+          <CardContent className="space-y-6 pt-6 border-t">
+            <FormSelector
+              label="Signup Form"
+              placeholder="Select a form..."
+              options={jotformForms.map(form => ({ id: form.id, title: form.title, count: form.count, status: form.status }))}
+              value={apiKeys.jotformSignupForm}
+              onChange={value => dispatch({ type: 'SET_FORM_ID', payload: { key: 'jotformSignupForm', value } })}
+              searchable
+              required
+              description="For initial mentor signups."
+            />
+            <FormSelector
+              label="Setup Form"
+              placeholder="Select a form..."
+              options={jotformForms.map(form => ({ id: form.id, title: form.title, count: form.count, status: form.status }))}
+              value={apiKeys.jotformSetupForm}
+              onChange={value => dispatch({ type: 'SET_FORM_ID', payload: { key: 'jotformSetupForm', value } })}
+              searchable
+              required
+              description="For mentor setup."
+            />
+            <FormSelector
+              label="Training Signup Form"
+              placeholder="Select a form..."
+              options={jotformForms.map(form => ({ id: form.id, title: form.title, count: form.count, status: form.status }))}
+              value={apiKeys.jotformTrainingSignupForm}
+              onChange={value => dispatch({ type: 'SET_FORM_ID', payload: { key: 'jotformTrainingSignupForm', value } })}
+              searchable
+              required
+              description="For training signups."
+            />
+          </CardContent>
         )}
-      </div>
+      </Card>
 
-      <Separator />
-
-      {/* Givebutter Campaigns */}
-      <div className="space-y-4">
-        <h4 className="font-semibold text-lg">Givebutter Campaign</h4>
-        <Button
-          onClick={onDiscoverGivebutter}
-          disabled={discoveringGivebutter || givebutterCampaigns.length > 0}
-          variant="outline"
-          className="w-full"
-        >
-          {discoveringGivebutter ? 'Loading Campaigns...' : givebutterCampaigns.length > 0 ? `✓ Loaded ${givebutterCampaigns.length} Campaigns` : 'Discover Available Campaigns'}
-        </Button>
-
+      {/* Givebutter Campaign Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">Givebutter Campaign</CardTitle>
+              <CardDescription className="text-sm">Select a fundraising campaign.</CardDescription>
+            </div>
+            <Button
+              onClick={handleDiscoverGivebutter}
+              disabled={discoveringGivebutter || givebutterCampaigns.length > 0}
+              variant="outline"
+            >
+              {discoveringGivebutter ? 'Loading...' : givebutterCampaigns.length > 0 ? `✓ Loaded ${givebutterCampaigns.length}` : 'Load Campaigns'}
+            </Button>
+          </div>
+        </CardHeader>
         {givebutterCampaigns.length > 0 && (
-          <FormSelector
-            label="Campaign"
-            placeholder="Select a campaign..."
-            options={givebutterCampaigns.map(campaign => ({
-              id: campaign.code,
-              title: campaign.title,
-              count: campaign.members_count,
-            }))}
-            value={apiKeys.givebutterCampaign}
-            onChange={value => setApiKeys({ ...apiKeys, givebutterCampaign: value })}
-            searchable
-            required
-            description="Givebutter fundraising campaign for this event"
-          />
+          <CardContent className="pt-6 border-t">
+            <FormSelector
+              label="Campaign"
+              placeholder="Select a campaign..."
+              options={givebutterCampaigns.map(campaign => ({ id: campaign.code, title: campaign.title, count: campaign.members_count }))}
+              value={apiKeys.givebutterCampaign}
+              onChange={value => dispatch({ type: 'SET_FORM_ID', payload: { key: 'givebutterCampaign', value } })}
+              searchable
+              required
+              description="Fundraising campaign for this event."
+            />
+          </CardContent>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
 
 // Step 3: CSV Upload
-interface UploadStepProps {
-  uploadedFile: File | null;
-  uploadStatus: 'idle' | 'uploading' | 'success' | 'error';
-  onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-}
+export function UploadStep() {
+  const { state, dispatch } = useConfigWizard();
+  const { uploadedFile, uploadStatus } = state;
 
-export function UploadStep({ uploadedFile, uploadStatus, onFileUpload }: UploadStepProps) {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    dispatch({ type: 'SET_UPLOAD_FILE', payload: { file, status: 'uploading' } });
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch('/api/sync/upload-csv', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        dispatch({ type: 'SET_UPLOAD_FILE', payload: { file, status: 'success' } });
+      } else {
+        dispatch({ type: 'SET_UPLOAD_FILE', payload: { file, status: 'error' } });
+      }
+    } catch (error) {
+      console.error('Error uploading file:', error);
+      dispatch({ type: 'SET_UPLOAD_FILE', payload: { file, status: 'error' } });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="border-2 border-dashed border-border/40 rounded-lg p-8 text-center bg-muted/10">
         <input
           type="file"
           accept=".csv"
-          onChange={onFileUpload}
+          onChange={handleFileUpload}
           className="hidden"
           id="csv-upload-wizard"
         />
@@ -356,7 +368,7 @@ export function UploadStep({ uploadedFile, uploadStatus, onFileUpload }: UploadS
             or drag and drop
           </p>
           <p className="text-xs text-muted-foreground/80 mt-2">
-            Supports Givebutter contacts export format
+            Givebutter contacts export.
           </p>
         </label>
       </div>
@@ -400,37 +412,15 @@ export function UploadStep({ uploadedFile, uploadStatus, onFileUpload }: UploadS
 }
 
 // Step 4: Review & Sync
-interface ReviewStepProps {
-  apiKeys: {
-    jotform: string;
-    givebutter: string;
-    jotformSignupForm: string;
-    jotformSetupForm: string;
-    jotformTrainingSignupForm: string;
-    givebutterCampaign: string;
-  };
-  apiStatus: ApiStatus;
-  storedConfig: SyncConfig | null;
-  uploadStatus: 'idle' | 'uploading' | 'success' | 'error';
+export function ReviewStep({ onSaveConfig, onRunSync, savingConfig, syncRunning, syncProgress }: {
+  onSaveConfig: () => void;
+  onRunSync: () => void;
   savingConfig: boolean;
   syncRunning: boolean;
   syncProgress: Array<{ step: string; status: 'running' | 'completed' | 'error' }>;
-  onSaveConfig: () => void;
-  onRunSync: () => void;
-}
-
-export function ReviewStep({
-  apiKeys,
-  apiStatus,
-  storedConfig,
-  uploadStatus,
-  savingConfig,
-  syncRunning,
-  syncProgress,
-  onSaveConfig,
-  onRunSync,
-}: ReviewStepProps) {
-  // Check if APIs have been tested
+}) {
+  const { state } = useConfigWizard();
+  const { apiKeys, apiStatus, storedConfig, uploadStatus } = state;
   const apisNotTested = (apiStatus.jotform !== true && !storedConfig?.configured) ||
                         (apiStatus.givebutter !== true && !storedConfig?.configured);
 
@@ -440,100 +430,98 @@ export function ReviewStep({
       {apisNotTested && (
         <Alert className="bg-warning/10 border-warning/20">
           <AlertCircle className="h-4 w-4 text-warning-text" />
-          <AlertTitle className="text-warning-text font-semibold">API Keys Not Tested</AlertTitle>
+          <AlertTitle className="text-warning-text font-semibold">APIs Not Tested</AlertTitle>
           <AlertDescription className="text-warning-text">
-            Please go back to Step 1 and test your API connections before saving the configuration.
+            Go to Step 1 and test API connections.
           </AlertDescription>
         </Alert>
       )}
 
-      {/* Pre-sync Checklist */}
       <Checklist
-        title="Pre-sync Checklist"
+        title="Final Checklist"
+        variant="card"
         showProgress
         items={[
           {
             id: 'jotform-api',
-            label: 'Jotform API configured',
+            label: 'Jotform API',
             completed: apiStatus.jotform === true || !!storedConfig?.configured,
             required: true,
-            description: 'Jotform API key has been configured and tested'
+            description: 'Jotform API key tested.'
           },
           {
             id: 'givebutter-api',
-            label: 'Givebutter API configured',
+            label: 'Givebutter API',
             completed: apiStatus.givebutter === true || !!storedConfig?.configured,
             required: true,
-            description: 'Givebutter API key has been configured and tested'
+            description: 'Givebutter API key tested.'
           },
           {
             id: 'forms-selected',
-            label: 'Forms and campaigns selected',
+            label: 'Forms & Campaigns',
             completed: !!(apiKeys.jotformSignupForm && apiKeys.jotformSetupForm && apiKeys.jotformTrainingSignupForm && apiKeys.givebutterCampaign),
             required: true,
-            description: 'All required forms and campaign have been selected'
+            description: 'All required forms selected.'
           },
           {
             id: 'csv-uploaded',
-            label: 'CSV file uploaded',
+            label: 'CSV File',
             completed: uploadStatus === 'success',
-            description: 'Givebutter export CSV has been uploaded successfully'
+            description: 'Givebutter export uploaded.'
           },
           {
             id: 'config-saved',
-            label: 'Configuration saved',
+            label: 'Configuration Saved',
             completed: !!storedConfig?.configured,
             required: true,
-            description: 'All settings have been saved to the database'
+            description: 'Settings saved to database.'
           },
         ]}
       />
 
-      {/* Action Buttons */}
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="space-y-4 pt-4 border-t">
+        {!storedConfig?.configured ? (
           <Button
             onClick={onSaveConfig}
-            disabled={
-              // Need either: new key entered OR stored config OR tested API in this session
-              (!apiKeys.jotform && !storedConfig?.configured && apiStatus.jotform !== true) ||
-              (!apiKeys.givebutter && !storedConfig?.configured && apiStatus.givebutter !== true) ||
-              !apiKeys.jotformSignupForm ||
-              !apiKeys.jotformSetupForm ||
-              !apiKeys.jotformTrainingSignupForm ||
-              !apiKeys.givebutterCampaign ||
-              savingConfig
-            }
-            variant="default"
+            disabled={savingConfig || apisNotTested || !apiKeys.jotformSignupForm || !apiKeys.jotformSetupForm || !apiKeys.givebutterCampaign}
             size="lg"
             className="w-full"
           >
-            {savingConfig ? 'Saving...' : storedConfig?.configured ? 'Update Config' : 'Save Config'}
+            {savingConfig ? 'Saving...' : 'Save Configuration'}
           </Button>
-          <Button
-            onClick={onRunSync}
-            disabled={syncRunning || !storedConfig?.configured || uploadStatus !== 'success'}
-            variant="default"
-            size="lg"
-            className="w-full"
-          >
-            {syncRunning ? 'Sync Running...' : 'Run Full Sync'}
-          </Button>
-        </div>
-        <Alert className="bg-info/10 border-info/20">
-          <AlertCircle className="h-4 w-4 text-info-text" />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Button
+              onClick={onSaveConfig}
+              disabled={savingConfig}
+              variant="outline"
+              size="lg"
+            >
+              {savingConfig ? 'Saving...' : 'Update Config'}
+            </Button>
+            <Button
+              onClick={onRunSync}
+              disabled={syncRunning || uploadStatus !== 'success'}
+              size="lg"
+            >
+              {syncRunning ? 'Sync in Progress...' : 'Run Full Sync'}
+            </Button>
+          </div>
+        )}
+
+        <Alert className="bg-info/10 border-info/20 text-center">
+          <AlertCircle className="h-4 w-4 text-info-text mx-auto mb-2" />
           <AlertDescription className="text-info-text">
             {!storedConfig?.configured
-              ? 'Save your configuration first before running the sync'
+              ? 'You must save the configuration before you can run a sync.'
               : uploadStatus !== 'success'
-              ? 'Upload a CSV file before running the full sync, or proceed to save config only'
-              : 'Configuration saved! You can now run the full sync'
+              ? 'A CSV upload is required to run the full sync.'
+              : 'Ready to run the full sync.'
             }
           </AlertDescription>
         </Alert>
       </div>
 
-      {/* Sync Progress */}
       {syncProgress.length > 0 && (
         <div className="mt-6 space-y-2">
           <h4 className="font-medium text-foreground">Sync Progress</h4>
@@ -558,7 +546,7 @@ export function ReviewStep({
 
       {!syncRunning && syncProgress.length === 0 && (
         <div className="text-center text-sm text-muted-foreground">
-          <p>This will synchronize all data from your configured sources</p>
+          <p>This will synchronize all data from your sources.</p>
         </div>
       )}
     </div>

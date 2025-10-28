@@ -16,9 +16,9 @@ export interface StatCardProps {
   value: number | string;
 
   /**
-   * Description text below the value
+   * Description text or element below the value
    */
-  description: string;
+  description: React.ReactNode;
 
   /**
    * Icon component to display in top-right

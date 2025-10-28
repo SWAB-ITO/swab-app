@@ -12,12 +12,12 @@ import dotenv from 'dotenv';
 import { resolve } from 'path';
 import { createClient } from '@supabase/supabase-js';
 import { getSupabaseConfig } from '../config/supabase';
+import { loadSyncConfigFromEnv } from '../../../src/lib/server/config/sync-config-loader';
 
 // Load .env.local
 dotenv.config({ path: resolve(process.cwd(), '.env.local') });
 
 const API_KEY = process.env.JOTFORM_API_KEY;
-const TRAINING_SIGNUP_FORM_ID = process.env.JOTFORM_TRAINING_SIGNUP_FORM_ID || '252935716589069';
 
 interface JotformAnswer {
   name?: string;
@@ -85,6 +85,9 @@ function parseSubmission(submission: JotformSubmission) {
     email: email,
     phone: phone,
 
+    // UGA class/year (e.g., "Freshman", "Sophomore", "Junior", "Senior")
+    uga_class: getAnswerByName('ugaClass'),
+
     // Session details (if captured)
     session_date: getAnswerByName('sessionDate') || getAnswerByName('date'),
     session_time: getAnswerByName('sessionTime') || getAnswerByName('time'),
@@ -107,6 +110,11 @@ async function syncTrainingSignup() {
     process.exit(1);
   }
 
+  // Load sync configuration from database
+  console.log('📋 Loading sync configuration...');
+  const syncConfig = await loadSyncConfigFromEnv(2025);
+  console.log(`✅ Loaded config for year 2025\n`);
+
   // Initialize Supabase
   const config = getSupabaseConfig();
   const supabase = createClient(config.url, config.serviceRoleKey || config.anonKey);
@@ -115,8 +123,8 @@ async function syncTrainingSignup() {
 
   try {
     // Fetch all submissions
-    console.log(`🔍 Fetching submissions from form ${TRAINING_SIGNUP_FORM_ID}...`);
-    const submissions = await fetchJotform(`/form/${TRAINING_SIGNUP_FORM_ID}/submissions?limit=1000`) as JotformSubmission[];
+    console.log(`🔍 Fetching submissions from form ${syncConfig.jotformTrainingFormId}...`);
+    const submissions = await fetchJotform(`/form/${syncConfig.jotformTrainingFormId}/submissions?limit=1000`) as JotformSubmission[];
 
     console.log(`✅ Found ${submissions.length} submissions\n`);
 

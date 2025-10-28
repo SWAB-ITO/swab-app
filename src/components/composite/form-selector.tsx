@@ -300,8 +300,8 @@ export function FormSelector({
       )}
 
       {/* Options count */}
-      {!loading && options.length > 0 && (
-        <p className="text-xs text-muted-foreground">
+      {!loading && options.length > 0 && !description && !error && (
+        <p className="text-sm text-muted-foreground">
           {options.length} option{options.length !== 1 ? 's' : ''} available
         </p>
       )}
