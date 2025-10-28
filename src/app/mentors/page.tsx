@@ -66,7 +66,7 @@ interface Mentor {
   personal_email?: string;
   uga_email?: string;
   phone: string;
-  status_category?: 'active' | 'limbo' | 'dropped';
+  status_category?: 'complete' | 'needs_fundraising' | 'needs_page' | 'needs_setup' | 'dropped';
   shift_preference?: string;
   partner_preference?: string;
   fundraising_page_url?: string;
@@ -375,13 +375,25 @@ export default function MentorsPage() {
       cell: ({ row }) => {
         const status = row.getValue('status_category') as Mentor['status_category'];
         const statusMap: Record<NonNullable<Mentor['status_category']>, 'completed' | 'failed' | 'pending'> = {
-          'active': 'completed',
-          'dropped': 'failed',
-          'limbo': 'pending'
+          'complete': 'completed',
+          'needs_fundraising': 'pending',
+          'needs_page': 'pending',
+          'needs_setup': 'pending',
+          'dropped': 'failed'
+        }
+        const displayNames: Record<NonNullable<Mentor['status_category']>, string> = {
+          'complete': 'Complete',
+          'needs_fundraising': 'Needs Fundraising',
+          'needs_page': 'Needs Page',
+          'needs_setup': 'Needs Setup',
+          'dropped': 'Dropped'
         }
         return (
-          <div className="capitalize">
-            <StatusBadge status={status ? statusMap[status] : 'completed'} />
+          <div>
+            <StatusBadge
+              status={status ? statusMap[status] : 'pending'}
+              label={status ? displayNames[status] : 'Unknown'}
+            />
           </div>
         );
       },

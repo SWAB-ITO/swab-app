@@ -5,7 +5,7 @@
  * for all HTTP requests. Base class for Jotform and Givebutter clients.
  */
 
-import { Logger } from '../../utils/logger';
+import { Logger } from '../utils/logger';
 
 export interface HttpClientConfig {
   baseUrl: string;

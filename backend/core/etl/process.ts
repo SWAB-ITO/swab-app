@@ -741,19 +741,18 @@ function processMentorSignup(
     gbMemberId = memberMatch.member_id;
   }
 
-  // Skip mentors with "Dropped 25" tag
+  // Log mentors with "Dropped 25" tag (but keep them in database with dropped status)
   if (hasDroppedTag) {
     errors.push({
       mn_id: signup.mn_id,
       error_type: 'dropped_mentor',
-      error_message: 'Mentor has "Dropped 25" tag in Givebutter - excluding from processing',
+      error_message: 'Mentor has "Dropped 25" tag in Givebutter - marked as dropped',
       severity: 'info',
       source_table: 'raw_gb_full_contacts',
       phone: normPhone,
       email: signup.uga_email || signup.personal_email,
       raw_data: { gb_contact_id: gbContactId },
     });
-    return null;
   }
 
   // Calculate fundraising data (merged into mentor record)
@@ -762,8 +761,8 @@ function processMentorSignup(
   const campaignMember = !!memberMatch;
 
   // Compute status
-  // Note: training_done is not tracked yet, so we only check if fundraised
-  const statusCategory =
+  // Note: Dropped mentors get 'dropped' status regardless of other conditions
+  const statusCategory = hasDroppedTag ? 'dropped' :
     fundraisedDone ? 'complete' :
     campaignMember && !fundraisedDone ? 'needs_fundraising' :
     !!setupMatch && !campaignMember ? 'needs_page' :
@@ -958,9 +957,8 @@ async function etlProcess() {
   // Clear FK references in raw_gb_campaign_members first
   await supabase.from('raw_gb_campaign_members').update({ mn_id: null }).not('mn_id', 'is', null);
 
-  // Note: Dropped mentors (tagged "Dropped 25") are filtered during processing
-  // but NOT deleted from the database - we keep them for historical records.
-  // They won't appear in the export because they're not added to the mentors array.
+  // Note: Dropped mentors (tagged "Dropped 25") are kept in the database with status_category='dropped'
+  // They will be filtered out during GB import export to prevent syncing back to Givebutter
 
   // UPSERT mentors (all data is now in one table)
   const mentorsResult = await supabase.from('mentors').upsert(mentors, { onConflict: 'mn_id' });
@@ -1013,15 +1011,22 @@ async function etlProcess() {
   await supabase.from('mn_gb_import').delete().gte('mn_id', '');
 
   // Build import rows using helper function (task data is now in mentor)
-  const gbImportRows = mentors.map(mentor => {
+  // Filter out dropped mentors - they should not be synced to Givebutter
+  const activeMentors = mentors.filter(m => m.status_category !== 'dropped');
+  const gbImportRows = activeMentors.map(mentor => {
     return buildGbImportRow(mentor, messageEngine, customFieldsConfig, getMentorTags);
   });
+
+  const droppedCount = mentors.length - activeMentors.length;
+  if (droppedCount > 0) {
+    console.log(`   Filtered out ${droppedCount} dropped mentors from export\n`);
+  }
 
   const { error: importError } = await supabase.from('mn_gb_import').insert(gbImportRows);
   if (importError) {
     console.error('❌ Error populating mn_gb_import:', importError);
   } else {
-    console.log(`✅ Populated mn_gb_import with ${gbImportRows.length} rows\n`);
+    console.log(`✅ Populated mn_gb_import with ${gbImportRows.length} rows (${mentors.length} total mentors)\n`);
   }
 
   // ============================================================================
@@ -1068,10 +1073,11 @@ async function etlProcess() {
   console.log();
 
   const breakdown = {
-    complete: mentors.filter(m => m.fundraised_done && m.training_done).length,
-    needs_fundraising: mentors.filter(m => m.campaign_member && !m.fundraised_done).length,
-    needs_page: mentors.filter(m => m.setup_submission_id && !m.campaign_member).length,
-    needs_setup: mentors.filter(m => !m.setup_submission_id).length,
+    complete: mentors.filter(m => m.status_category === 'complete').length,
+    needs_fundraising: mentors.filter(m => m.status_category === 'needs_fundraising').length,
+    needs_page: mentors.filter(m => m.status_category === 'needs_page').length,
+    needs_setup: mentors.filter(m => m.status_category === 'needs_setup').length,
+    dropped: mentors.filter(m => m.status_category === 'dropped').length,
   };
 
   console.log(`📈 Status Breakdown:`);
@@ -1079,6 +1085,7 @@ async function etlProcess() {
   console.log(`   Needs fundraising: ${breakdown.needs_fundraising}`);
   console.log(`   Needs page: ${breakdown.needs_page}`);
   console.log(`   Needs setup: ${breakdown.needs_setup}`);
+  console.log(`   Dropped: ${breakdown.dropped}`);
   console.log();
 }
 

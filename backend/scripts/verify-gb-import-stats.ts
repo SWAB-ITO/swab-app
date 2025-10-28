@@ -123,7 +123,7 @@ async function verifyGbImportStats() {
   }, {} as Record<string, number>);
 
   Object.entries(ugaClassCounts || {}).forEach(([ugaClass, count]) => {
-    console.log(`   ${ugaClass}: ${count} (${((count / total) * 100).toFixed(1)}%)`);
+    console.log(`   ${ugaClass}: ${count} (${(((count as number) / total) * 100).toFixed(1)}%)`);
   });
   console.log();
 

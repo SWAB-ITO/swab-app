@@ -5,8 +5,8 @@
  * Eliminates duplicate fetchJotform() functions across sync scripts.
  */
 
-import { HttpClient } from './http-client';
-import { Logger } from '../../utils/logger';
+import { HttpClient } from './http';
+import { Logger } from '../utils/logger';
 
 export interface JotformClientConfig {
   apiKey: string;

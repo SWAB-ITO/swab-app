@@ -27,7 +27,7 @@ interface Mentor {
     amount_raised?: number;
     fundraising_page_url?: string;
     notes?: string;
-    status_category: 'active' | 'limbo' | 'dropped';
+    status_category?: 'complete' | 'needs_fundraising' | 'needs_page' | 'needs_setup' | 'dropped';
     training_done?: boolean;
     fundraising_done?: boolean;
 }
@@ -96,11 +96,13 @@ export const MentorEditForm = ({ mentor, onMentorChange, onSave, isSaving }: Men
                 </div>
                 <div className="space-y-2 col-span-2">
                     <Label htmlFor="status">Status</Label>
-                    <Select value={mentor.status_category} onValueChange={(value: Mentor['status_category']) => onMentorChange({...mentor, status_category: value})}>
+                    <Select value={mentor.status_category} onValueChange={(value) => onMentorChange({...mentor, status_category: value as Mentor['status_category']})}>
                     <SelectTrigger><SelectValue placeholder="Select status" /></SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="limbo">Limbo</SelectItem>
+                        <SelectItem value="complete">Complete</SelectItem>
+                        <SelectItem value="needs_fundraising">Needs Fundraising</SelectItem>
+                        <SelectItem value="needs_page">Needs Page</SelectItem>
+                        <SelectItem value="needs_setup">Needs Setup</SelectItem>
                         <SelectItem value="dropped">Dropped</SelectItem>
                     </SelectContent>
                     </Select>

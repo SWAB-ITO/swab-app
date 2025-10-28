@@ -6,8 +6,8 @@ import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { GivebutterClient } from "../../lib/infrastructure/clients/givebutter-client.js";
-import { Logger } from "../../lib/utils/logger.js";
+import { GivebutterClient } from "../../backend/lib/infrastructure/clients/givebutter-client.js";
+import { Logger } from "../../backend/lib/utils/logger.js";
 
 // Initialize
 const logger = new Logger('GivebutterMCP');

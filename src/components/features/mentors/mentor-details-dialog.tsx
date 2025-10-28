@@ -30,7 +30,7 @@ interface Mentor {
   amount_raised?: number;
   fundraising_page_url?: string;
   notes?: string;
-  status_category: 'active' | 'limbo' | 'dropped';
+  status_category?: 'complete' | 'needs_fundraising' | 'needs_page' | 'needs_setup' | 'dropped';
   training_done?: boolean;
   fundraising_done?: boolean;
 }
@@ -57,7 +57,7 @@ export const MentorDetailsDialog = ({
   const [editableMentor, setEditableMentor] = useState<Partial<Mentor> | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [justCheckedIn, setJustCheckedIn] = useState(false);
-  const prevMentorIdRef = useRef<string | undefined>();
+  const prevMentorIdRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (mentor) {
