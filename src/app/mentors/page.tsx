@@ -56,6 +56,8 @@ import { DataTableToolbar } from '@/components/composite/data-table-toolbar';
 import { StatusBadge } from '@/components/composite/status-badge';
 import { DataTablePagination } from '@/components/composite/data-table-pagination';
 import { MentorDetailsDialog } from '@/components/features/mentors/mentor-details-dialog';
+import { PageLayout } from '@/components/layout/page-layout';
+import { PageSection } from '@/components/layout/page-section';
 
 interface Mentor {
   mn_id: string;
@@ -469,186 +471,159 @@ export default function MentorsPage() {
   });
 
   return (
-    <div className="min-h-screen bg-muted/20">
-      <div className="container mx-auto p-6 md:p-8 max-w-7xl">
-        {/* Header */}
-        <div className="mb-10">
-          <div className="flex items-center justify-between mb-4">
-            <div className="inline-block">
-              <span className="text-sm font-semibold text-primary bg-primary/10 px-4 py-2 rounded-full border border-primary/20">
-                Mentor Management
-              </span>
-            </div>
-            <Button
-              onClick={handleExportGBImport}
-              disabled={isExporting}
-              variant="outline"
-              className="gap-2"
-            >
-              <Download className="h-4 w-4" />
-              {isExporting ? 'Exporting...' : 'Export for Givebutter'}
-            </Button>
-          </div>
-          <h1 className="text-5xl md:text-6xl font-bold tracking-tight mb-4 bg-gradient-to-r from-foreground via-foreground to-foreground/70 bg-clip-text">
-            Mentors
-          </h1>
-          <p className="text-muted-foreground text-xl md:text-2xl font-light max-w-2xl">
-            Search, view, and manage all mentor records.
-          </p>
-        </div>
-
-        {/* Quick Search Section - Centered */}
-        <section className="mb-14 animate-fade-in">
-          <div className="max-w-2xl mx-auto">
-            <Popover open={searchOpen} onOpenChange={setSearchOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  role="combobox"
-                  aria-expanded={searchOpen}
-                  className="w-full justify-between h-14 text-base shadow-sm hover:shadow-md transition-all"
-                >
-                  {searchValue || "Type phone number to check in..."}
-                  {/* <Search className="ml-2 h-5 w-5 shrink-0 opacity-50" /> */}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-[600px] p-0" align="center">
-                <Command shouldFilter={false}>
-                  <CommandInput
-                    placeholder="Type last 4 digits of phone..."
-                    value={searchValue}
-                    onValueChange={handleSearchInputChange}
-                  />
-                  <CommandList>
-                    <CommandEmpty>
-                      {searchValue.length > 0 ? 'No mentors found.' : 'Start typing to search...'}
-                    </CommandEmpty>
-                    {searchResults.length > 0 && (
-                      <CommandGroup heading="Matching Mentors">
-                        {searchResults.map((mentor) => (
-                          <CommandItem
-                            key={mentor.mn_id}
-                            value={mentor.mn_id}
-                            onSelect={() => handleSelectMentor(mentor)}
-                            className="flex items-center justify-between py-3 cursor-pointer"
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="font-mono text-sm font-medium">
-                                {mentor.phone}
+    <PageLayout
+      badgeText="Mentor Management"
+      title="Mentors"
+      headerActions={
+        <Button
+          onClick={handleExportGBImport}
+          disabled={isExporting}
+          variant="outline"
+          className="gap-2"
+        >
+          <Download className="h-4 w-4" />
+          {isExporting ? 'Exporting...' : 'Export for Givebutter'}
+        </Button>
+      }
+    >
+      <PageSection
+        className="animate-fade-in"
+      >
+        <div className="max-w-2xl mx-auto">
+          <Popover open={searchOpen} onOpenChange={setSearchOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                role="combobox"
+                aria-expanded={searchOpen}
+                className="w-full justify-between h-14 text-base shadow-sm hover:shadow-md transition-all"
+              >
+                {searchValue || "Type phone number to check in..."}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[600px] p-0" align="center">
+              <Command shouldFilter={false}>
+                <CommandInput
+                  placeholder="Type last 4 digits of phone..."
+                  value={searchValue}
+                  onValueChange={handleSearchInputChange}
+                />
+                <CommandList>
+                  <CommandEmpty>
+                    {searchValue.length > 0 ? 'No mentors found.' : 'Start typing to search...'}
+                  </CommandEmpty>
+                  {searchResults.length > 0 && (
+                    <CommandGroup heading="Matching Mentors">
+                      {searchResults.map((mentor) => (
+                        <CommandItem
+                          key={mentor.mn_id}
+                          value={mentor.mn_id}
+                          onSelect={() => handleSelectMentor(mentor)}
+                          className="flex items-center justify-between py-3 cursor-pointer"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono text-sm font-medium">
+                              {mentor.phone}
+                            </span>
+                            <span className="text-sm">—</span>
+                            <span className="text-sm font-medium">
+                              {mentor.first_name} {mentor.last_name}
+                            </span>
+                            {mentor.training_done && (
+                              <span className="ml-2 px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">
+                                ✓ Checked In
                               </span>
-                              <span className="text-sm">—</span>
-                              <span className="text-sm font-medium">
-                                {mentor.first_name} {mentor.last_name}
-                              </span>
-                              {mentor.training_done && (
-                                <span className="ml-2 px-2 py-0.5 text-xs bg-green-100 text-green-700 rounded-full">
-                                  ✓ Checked In
-                                </span>
-                              )}
-                            </div>
-                            {/* <Check className="h-4 w-4 opacity-0" /> */}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    )}
-                  </CommandList>
-                </Command>
-              </PopoverContent>
-            </Popover>
-          </div>
-        </section>
-
-        {/* Browse All Section */}
-        <section className="mb-6">
-          <div className="mb-8">
-            <h2 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
-              <div className="w-1 h-8 bg-primary rounded-full"></div>
-              Browse All Mentors
-            </h2>
-            <p className="text-muted-foreground text-base ml-7">View and manage all mentor records</p>
-          </div>
-        </section>
-
-        {/* Table Section */}
-        <section>
-          <div className="rounded-lg border border-border/40 bg-card overflow-hidden">
-            <div className="p-4 border-b">
-              <DataTableToolbar table={table} searchInputRef={searchInputRef} />
-            </div>
-            <Table>
-              <TableHeader>
-                {table.getHeaderGroups().map((headerGroup) => (
-                  <TableRow key={headerGroup.id}>
-                    {headerGroup.headers.map((header) => {
-                      return (
-                        <TableHead key={header.id}>
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext()
-                              )}
-                        </TableHead>
-                      );
-                    })}
-                  </TableRow>
-                ))}
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={columns.length} className="h-24 text-center">
-                      Loading mentors...
-                    </TableCell>
-                  </TableRow>
-                ) : table.getRowModel().rows?.length ? (
-                  table.getRowModel().rows.map((row) => (
-                    <TableRow
-                      key={row.id}
-                      data-state={row.getIsSelected() && 'selected'}
-                      className="hover:bg-muted/50 cursor-pointer"
-                      onClick={() => handleViewDetails(row.original)}
-                    >
-                      {row.getVisibleCells().map((cell) => (
-                        <TableCell key={cell.id}>
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </TableCell>
+                            )}
+                          </div>
+                        </CommandItem>
                       ))}
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={columns.length}
-                      className="h-24 text-center"
-                    >
-                      No mentors found.
-                    </TableCell>
+                    </CommandGroup>
+                  )}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
+        </div>
+      </PageSection>
+
+      <PageSection
+        title="Browse All Mentors"
+      >
+        <div className="rounded-lg border border-border/40 bg-card overflow-hidden">
+          <div className="p-4 border-b">
+            <DataTableToolbar table={table} searchInputRef={searchInputRef} />
+          </div>
+          <Table>
+            <TableHeader>
+              {table.getHeaderGroups().map((headerGroup) => (
+                <TableRow key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => {
+                    return (
+                      <TableHead key={header.id}>
+                        {header.isPlaceholder
+                          ? null
+                          : flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                      </TableHead>
+                    );
+                  })}
+                </TableRow>
+              ))}
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={columns.length} className="h-24 text-center">
+                    Loading mentors...
+                  </TableCell>
+                </TableRow>
+              ) : table.getRowModel().rows?.length ? (
+                table.getRowModel().rows.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    data-state={row.getIsSelected() && 'selected'}
+                    className="hover:bg-muted/50 cursor-pointer"
+                    onClick={() => handleViewDetails(row.original)}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <TableCell key={cell.id}>
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext()
+                        )}
+                      </TableCell>
+                    ))}
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell
+                    colSpan={columns.length}
+                    className="h-24 text-center"
+                  >
+                    No mentors found.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+        <div className="py-4">
+          <DataTablePagination table={table} />
+        </div>
+      </PageSection>
 
-          {/* Pagination */}
-          <div className="py-4">
-            <DataTablePagination table={table} />
-          </div>
-        </section>
-
-        <MentorDetailsDialog
-          isOpen={dialogOpen}
-          onOpenChange={setDialogOpen}
-          mentor={selectedMentor}
-          onUpdate={handleUpdateMentor}
-          onCheckIn={handleCheckIn}
-          onUndoCheckIn={handleUndoCheckIn}
-          onNext={handleNextMentor}
-        />
-      </div>
-    </div>
+      <MentorDetailsDialog
+        isOpen={dialogOpen}
+        onOpenChange={setDialogOpen}
+        mentor={selectedMentor}
+        onUpdate={handleUpdateMentor}
+        onCheckIn={handleCheckIn}
+        onUndoCheckIn={handleUndoCheckIn}
+        onNext={handleNextMentor}
+      />
+    </PageLayout>
   );
 }

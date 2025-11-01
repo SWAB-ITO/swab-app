@@ -45,12 +45,6 @@ export default function LoginPage() {
           <h2 className="mt-6 text-center text-3xl font-bold text-gray-900">
             Sign in to your account
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Or{' '}
-            <Link href="/auth/signup" className="font-medium text-blue-600 hover:text-blue-500">
-              create a new account
-            </Link>
-          </p>
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleLogin}>
           <div className="space-y-4 rounded-md shadow-sm">
@@ -97,6 +91,21 @@ export default function LoginPage() {
           >
             {loading ? 'Signing in...' : 'Sign in'}
           </Button>
+
+          <div className="text-center space-y-2">
+            <p className="text-sm text-gray-600">
+              Or{' '}
+              <Link href="/auth/magic-link" className="font-medium text-blue-600 hover:text-blue-500">
+                sign in with magic link
+              </Link>
+            </p>
+            <p className="text-sm text-gray-600">
+              Don't have an account?{' '}
+              <Link href="/auth/signup" className="font-medium text-blue-600 hover:text-blue-500">
+                Sign up
+              </Link>
+            </p>
+          </div>
         </form>
       </div>
     </div>

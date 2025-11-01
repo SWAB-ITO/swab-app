@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfigWizard, WizardStep } from '@/components/features/config/config-wizard';
 import {
   ApiConfigStep,
@@ -31,12 +31,9 @@ function SettingsContent() {
               Configuration & Preferences
             </span>
           </div>
-          <h1 className="text-5xl md:text-6xl font-bold tracking-tight mb-4 bg-gradient-to-r from-foreground via-foreground to-foreground/70 bg-clip-text">
+          <h1 className="text-5xl md:text-6xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground to-foreground/70 bg-clip-text">
             Settings
           </h1>
-          <p className="text-muted-foreground text-xl md:text-2xl font-light max-w-2xl">
-            Configure API keys and data sources.
-          </p>
         </div>
 
         {/* Render API Config directly, removing tabs */}
@@ -101,17 +98,30 @@ function ApiConfigContent() {
     }, [dispatch]);
 
     const handleSaveConfig = async () => {
+      console.log('Save config clicked!');
+      console.log('Current state:', { apiKeys, testedApiKeys, storedConfig });
       setSavingConfig(true);
       try {
         const jotformKey = apiKeys.jotform || testedApiKeys.jotform || storedConfig?.config?.jotform_api_key;
         const givebutterKey = apiKeys.givebutter || testedApiKeys.givebutter || storedConfig?.config?.givebutter_api_key;
-  
+
+        console.log('Keys found:', { jotformKey: !!jotformKey, givebutterKey: !!givebutterKey });
+
         if (!jotformKey || !givebutterKey) {
+            console.log('Missing API keys!');
             showDialog('API keys are required.', 'Missing API Keys');
             setSavingConfig(false);
             return;
         }
   
+        console.log('Sending config save request with:', {
+          jotformSignupFormId: apiKeys.jotformSignupForm,
+          jotformSetupFormId: apiKeys.jotformSetupForm,
+          jotformTrainingSignupFormId: apiKeys.jotformTrainingSignupForm,
+          jotformPartnerFormId: apiKeys.jotformPartnerPreferenceForm,
+          givebutterCampaignCode: apiKeys.givebutterCampaign,
+        });
+
         const response = await fetch('/api/sync/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -121,16 +131,29 @@ function ApiConfigContent() {
             jotformSignupFormId: apiKeys.jotformSignupForm,
             jotformSetupFormId: apiKeys.jotformSetupForm,
             jotformTrainingSignupFormId: apiKeys.jotformTrainingSignupForm,
+            jotformPartnerFormId: apiKeys.jotformPartnerPreferenceForm,
             givebutterCampaignCode: apiKeys.givebutterCampaign,
           }),
         });
-  
+
+        console.log('Response status:', response.status, response.statusText);
+
         if (response.ok) {
             const data = await response.json();
+            console.log('Config save response:', data);
             dispatch({ type: 'SET_STORED_CONFIG', payload: data });
             showDialog('Configuration saved successfully!', 'Success');
         } else {
-            throw new Error('Failed to save configuration');
+            const errorText = await response.text();
+            console.error('Config save error response:', errorText);
+            let errorData;
+            try {
+              errorData = JSON.parse(errorText);
+            } catch {
+              errorData = { error: errorText || 'Failed to save configuration' };
+            }
+            console.error('Config save error:', errorData);
+            throw new Error(errorData.error || 'Failed to save configuration');
         }
       } catch (error) {
         console.error('Error saving config:', error);
@@ -244,7 +267,6 @@ function ApiConfigContent() {
             <Database className="h-6 w-6 text-primary" />
             API Configuration & Data Sync
           </CardTitle>
-          <CardDescription className="text-base mt-2">A guided setup for data sync.</CardDescription>
         </CardHeader>
         <CardContent>
           <ConfigWizardProvider>

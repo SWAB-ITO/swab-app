@@ -102,8 +102,8 @@ WHERE mn_id = :partner_mn_id
 **Table:** `event_mentor_checkins` (new table needed)
 **Fields:**
 - `checkin_id` (uuid, pk)
-- `mentor1_id` (fk ’ mentors.mn_id)
-- `mentor2_id` (fk ’ mentors.mn_id)
+- `mentor1_id` (fk ï¿½ mentors.mn_id)
+- `mentor2_id` (fk ï¿½ mentors.mn_id)
 - `checked_in_at` (timestamp)
 - `checked_in_by` (staff identifier)
 - `notes` (text, nullable)

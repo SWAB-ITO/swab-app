@@ -3,6 +3,8 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { TopNav } from "@/components/layout/top-nav";
 import { BottomNav } from "@/components/layout/bottom-nav";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -31,6 +33,10 @@ export default function RootLayout({
           {/* Bottom Floating Navigation */}
           <BottomNav />
         </div>
+
+        {/* Vercel Monitoring - see ai/Code Guidelines/MONITORING_AND_ANALYTICS.md */}
+        <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );

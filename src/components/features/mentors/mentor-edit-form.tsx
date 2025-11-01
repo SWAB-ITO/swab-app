@@ -1,6 +1,6 @@
 'use client';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -46,7 +46,6 @@ export const MentorEditForm = ({ mentor, onMentorChange, onSave, isSaving }: Men
         <Card>
             <CardHeader>
                 <CardTitle>Personal Information</CardTitle>
-                <CardDescription>Update the mentor's personal and contact details.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-x-4 gap-y-6">
                 <div className="space-y-2">
@@ -83,7 +82,6 @@ export const MentorEditForm = ({ mentor, onMentorChange, onSave, isSaving }: Men
         <Card>
             <CardHeader>
                 <CardTitle>Program Details</CardTitle>
-                <CardDescription>Manage mentor's program-specific information.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-x-4 gap-y-6">
                 <div className="space-y-2">
@@ -117,7 +115,6 @@ export const MentorEditForm = ({ mentor, onMentorChange, onSave, isSaving }: Men
         <Card>
             <CardHeader>
                 <CardTitle>Fundraising</CardTitle>
-                <CardDescription>Track fundraising progress and details.</CardDescription>
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-x-4 gap-y-6">
                 <div className="space-y-2 col-span-2">

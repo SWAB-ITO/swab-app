@@ -82,16 +82,19 @@ export type Database = {
           campaign_joined_at: string | null
           campaign_member: boolean | null
           created_at: string | null
+          dropped: boolean | null
           first_name: string
           full_name: string | null
           fundraised_at: string | null
           fundraised_done: boolean | null
+          fundraising_page_url: string | null
           gb_contact_id: string | null
           gb_member_id: string | null
           gender: string | null
           last_name: string
           middle_name: string | null
           mn_id: string
+          notes: string | null
           partner_preference: string | null
           personal_email: string | null
           phone: string | null
@@ -104,6 +107,9 @@ export type Database = {
           status_category: string | null
           training_at: string | null
           training_done: boolean | null
+          training_signup_at: string | null
+          training_signup_done: boolean | null
+          training_signup_submission_id: string | null
           uga_class: string | null
           uga_email: string | null
           updated_at: string | null
@@ -113,16 +119,19 @@ export type Database = {
           campaign_joined_at?: string | null
           campaign_member?: boolean | null
           created_at?: string | null
+          dropped?: boolean | null
           first_name: string
           full_name?: string | null
           fundraised_at?: string | null
           fundraised_done?: boolean | null
+          fundraising_page_url?: string | null
           gb_contact_id?: string | null
           gb_member_id?: string | null
           gender?: string | null
           last_name: string
           middle_name?: string | null
           mn_id: string
+          notes?: string | null
           partner_preference?: string | null
           personal_email?: string | null
           phone?: string | null
@@ -135,6 +144,9 @@ export type Database = {
           status_category?: string | null
           training_at?: string | null
           training_done?: boolean | null
+          training_signup_at?: string | null
+          training_signup_done?: boolean | null
+          training_signup_submission_id?: string | null
           uga_class?: string | null
           uga_email?: string | null
           updated_at?: string | null
@@ -144,16 +156,19 @@ export type Database = {
           campaign_joined_at?: string | null
           campaign_member?: boolean | null
           created_at?: string | null
+          dropped?: boolean | null
           first_name?: string
           full_name?: string | null
           fundraised_at?: string | null
           fundraised_done?: boolean | null
+          fundraising_page_url?: string | null
           gb_contact_id?: string | null
           gb_member_id?: string | null
           gender?: string | null
           last_name?: string
           middle_name?: string | null
           mn_id?: string
+          notes?: string | null
           partner_preference?: string | null
           personal_email?: string | null
           phone?: string | null
@@ -166,72 +181,108 @@ export type Database = {
           status_category?: string | null
           training_at?: string | null
           training_done?: boolean | null
+          training_signup_at?: string | null
+          training_signup_done?: boolean | null
+          training_signup_submission_id?: string | null
           uga_class?: string | null
           uga_email?: string | null
           updated_at?: string | null
         }
         Relationships: []
       }
-      mn_errors: {
+      mn_changes: {
         Row: {
-          chosen_value: string | null
+          change_category: string | null
+          change_type: string
           created_at: string | null
-          email: string | null
-          error_message: string | null
-          error_type: string
+          created_by: string | null
+          description: string | null
+          detected_at: string | null
           field_name: string | null
           id: number
-          local_value: string | null
+          metadata: Json | null
           mn_id: string | null
-          phone: string | null
-          raw_data: Json | null
-          remote_value: string | null
+          new_value: string | null
+          notes: string | null
+          old_value: string | null
+          resolution_notes: string | null
           resolved: boolean | null
+          resolved_at: string | null
+          resolved_by: string | null
           severity: string | null
+          source: string | null
           source_table: string | null
+          status: string | null
+          synced_to_gb: boolean | null
+          title: string
           updated_at: string | null
         }
         Insert: {
-          chosen_value?: string | null
+          change_category?: string | null
+          change_type: string
           created_at?: string | null
-          email?: string | null
-          error_message?: string | null
-          error_type: string
+          created_by?: string | null
+          description?: string | null
+          detected_at?: string | null
           field_name?: string | null
           id?: number
-          local_value?: string | null
+          metadata?: Json | null
           mn_id?: string | null
-          phone?: string | null
-          raw_data?: Json | null
-          remote_value?: string | null
+          new_value?: string | null
+          notes?: string | null
+          old_value?: string | null
+          resolution_notes?: string | null
           resolved?: boolean | null
+          resolved_at?: string | null
+          resolved_by?: string | null
           severity?: string | null
+          source?: string | null
           source_table?: string | null
+          status?: string | null
+          synced_to_gb?: boolean | null
+          title: string
           updated_at?: string | null
         }
         Update: {
-          chosen_value?: string | null
+          change_category?: string | null
+          change_type?: string
           created_at?: string | null
-          email?: string | null
-          error_message?: string | null
-          error_type?: string
+          created_by?: string | null
+          description?: string | null
+          detected_at?: string | null
           field_name?: string | null
           id?: number
-          local_value?: string | null
+          metadata?: Json | null
           mn_id?: string | null
-          phone?: string | null
-          raw_data?: Json | null
-          remote_value?: string | null
+          new_value?: string | null
+          notes?: string | null
+          old_value?: string | null
+          resolution_notes?: string | null
           resolved?: boolean | null
+          resolved_at?: string | null
+          resolved_by?: string | null
           severity?: string | null
+          source?: string | null
           source_table?: string | null
+          status?: string | null
+          synced_to_gb?: boolean | null
+          title?: string
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "mn_changes_mn_id_fkey"
+            columns: ["mn_id"]
+            isOneToOne: false
+            referencedRelation: "mentors"
+            referencedColumns: ["mn_id"]
+          },
+        ]
       }
       mn_gb_import: {
         Row: {
           "✅ Mentor Training Signed Up?": string | null
+          "🎓 UGA Class": string | null
           "👯‍♂️ Partner Preference": string | null
           "💰 Amount Fundraised": string | null
           "💸 Givebutter Page Setup": string | null
@@ -271,6 +322,7 @@ export type Database = {
         }
         Insert: {
           "✅ Mentor Training Signed Up?"?: string | null
+          "🎓 UGA Class"?: string | null
           "👯‍♂️ Partner Preference"?: string | null
           "💰 Amount Fundraised"?: string | null
           "💸 Givebutter Page Setup"?: string | null
@@ -310,6 +362,7 @@ export type Database = {
         }
         Update: {
           "✅ Mentor Training Signed Up?"?: string | null
+          "🎓 UGA Class"?: string | null
           "👯‍♂️ Partner Preference"?: string | null
           "💰 Amount Fundraised"?: string | null
           "💸 Givebutter Page Setup"?: string | null
@@ -651,6 +704,45 @@ export type Database = {
         }
         Relationships: []
       }
+      raw_mn_training_signup: {
+        Row: {
+          created_at: string | null
+          email: string | null
+          phone: string | null
+          raw_data: Json | null
+          session_date: string | null
+          session_time: string | null
+          submission_id: string
+          submitted_at: string | null
+          uga_class: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          email?: string | null
+          phone?: string | null
+          raw_data?: Json | null
+          session_date?: string | null
+          session_time?: string | null
+          submission_id: string
+          submitted_at?: string | null
+          uga_class?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          email?: string | null
+          phone?: string | null
+          raw_data?: Json | null
+          session_date?: string | null
+          session_time?: string | null
+          submission_id?: string
+          submitted_at?: string | null
+          uga_class?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       sync_config: {
         Row: {
           configured_at: string | null
@@ -665,6 +757,7 @@ export type Database = {
           jotform_api_key: string | null
           jotform_setup_form_id: string | null
           jotform_signup_form_id: string | null
+          jotform_training_signup_form_id: string | null
           last_csv_upload_at: string | null
           last_gb_api_sync_at: string | null
           last_jotform_sync_at: string | null
@@ -686,6 +779,7 @@ export type Database = {
           jotform_api_key?: string | null
           jotform_setup_form_id?: string | null
           jotform_signup_form_id?: string | null
+          jotform_training_signup_form_id?: string | null
           last_csv_upload_at?: string | null
           last_gb_api_sync_at?: string | null
           last_jotform_sync_at?: string | null
@@ -707,12 +801,189 @@ export type Database = {
           jotform_api_key?: string | null
           jotform_setup_form_id?: string | null
           jotform_signup_form_id?: string | null
+          jotform_training_signup_form_id?: string | null
           last_csv_upload_at?: string | null
           last_gb_api_sync_at?: string | null
           last_jotform_sync_at?: string | null
           last_sync_at?: string | null
           last_tag_query_at?: string | null
           system_initialized?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      sync_configs: {
+        Row: {
+          active: boolean | null
+          config_key: string
+          config_type: string | null
+          config_value: string
+          created_at: string | null
+          description: string | null
+          id: number
+          updated_at: string | null
+          year: number
+        }
+        Insert: {
+          active?: boolean | null
+          config_key: string
+          config_type?: string | null
+          config_value: string
+          created_at?: string | null
+          description?: string | null
+          id?: number
+          updated_at?: string | null
+          year: number
+        }
+        Update: {
+          active?: boolean | null
+          config_key?: string
+          config_type?: string | null
+          config_value?: string
+          created_at?: string | null
+          description?: string | null
+          id?: number
+          updated_at?: string | null
+          year?: number
+        }
+        Relationships: []
+      }
+      sync_conflicts: {
+        Row: {
+          conflict_type: string
+          context: Json | null
+          custom_value: string | null
+          detected_at: string | null
+          id: number
+          mn_id: string | null
+          option_a: Json
+          option_b: Json
+          recommendation_reason: string | null
+          recommended_option: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          severity: string | null
+          source_table: string | null
+          status: string | null
+          sync_log_id: number | null
+          user_decision: string | null
+        }
+        Insert: {
+          conflict_type: string
+          context?: Json | null
+          custom_value?: string | null
+          detected_at?: string | null
+          id?: number
+          mn_id?: string | null
+          option_a: Json
+          option_b: Json
+          recommendation_reason?: string | null
+          recommended_option?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string | null
+          source_table?: string | null
+          status?: string | null
+          sync_log_id?: number | null
+          user_decision?: string | null
+        }
+        Update: {
+          conflict_type?: string
+          context?: Json | null
+          custom_value?: string | null
+          detected_at?: string | null
+          id?: number
+          mn_id?: string | null
+          option_a?: Json
+          option_b?: Json
+          recommendation_reason?: string | null
+          recommended_option?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string | null
+          source_table?: string | null
+          status?: string | null
+          sync_log_id?: number | null
+          user_decision?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_conflicts_mn_id_fkey"
+            columns: ["mn_id"]
+            isOneToOne: false
+            referencedRelation: "mentors"
+            referencedColumns: ["mn_id"]
+          },
+        ]
+      }
+      sync_errors: {
+        Row: {
+          can_retry: boolean | null
+          chosen_value: string | null
+          created_at: string | null
+          email: string | null
+          error_message: string | null
+          error_type: string
+          field_name: string | null
+          id: number
+          local_value: string | null
+          max_retries: number | null
+          mn_id: string | null
+          next_retry_at: string | null
+          phone: string | null
+          raw_data: Json | null
+          remote_value: string | null
+          resolution_method: string | null
+          resolved: boolean | null
+          retry_count: number | null
+          severity: string | null
+          source_table: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          can_retry?: boolean | null
+          chosen_value?: string | null
+          created_at?: string | null
+          email?: string | null
+          error_message?: string | null
+          error_type: string
+          field_name?: string | null
+          id?: number
+          local_value?: string | null
+          max_retries?: number | null
+          mn_id?: string | null
+          next_retry_at?: string | null
+          phone?: string | null
+          raw_data?: Json | null
+          remote_value?: string | null
+          resolution_method?: string | null
+          resolved?: boolean | null
+          retry_count?: number | null
+          severity?: string | null
+          source_table?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          can_retry?: boolean | null
+          chosen_value?: string | null
+          created_at?: string | null
+          email?: string | null
+          error_message?: string | null
+          error_type?: string
+          field_name?: string | null
+          id?: number
+          local_value?: string | null
+          max_retries?: number | null
+          mn_id?: string | null
+          next_retry_at?: string | null
+          phone?: string | null
+          raw_data?: Json | null
+          remote_value?: string | null
+          resolution_method?: string | null
+          resolved?: boolean | null
+          retry_count?: number | null
+          severity?: string | null
+          source_table?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -774,11 +1045,67 @@ export type Database = {
         }
         Relationships: []
       }
+      sync_warnings: {
+        Row: {
+          acknowledged: boolean | null
+          current_value: string | null
+          detected_at: string | null
+          field_name: string | null
+          id: number
+          mn_id: string | null
+          severity: string | null
+          suggested_value: string | null
+          warning_message: string
+          warning_type: string
+        }
+        Insert: {
+          acknowledged?: boolean | null
+          current_value?: string | null
+          detected_at?: string | null
+          field_name?: string | null
+          id?: number
+          mn_id?: string | null
+          severity?: string | null
+          suggested_value?: string | null
+          warning_message: string
+          warning_type: string
+        }
+        Update: {
+          acknowledged?: boolean | null
+          current_value?: string | null
+          detected_at?: string | null
+          field_name?: string | null
+          id?: number
+          mn_id?: string | null
+          severity?: string | null
+          suggested_value?: string | null
+          warning_message?: string
+          warning_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_warnings_mn_id_fkey"
+            columns: ["mn_id"]
+            isOneToOne: false
+            referencedRelation: "mentors"
+            referencedColumns: ["mn_id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      get_mentor_change_summary: {
+        Args: { p_mn_id: string }
+        Returns: {
+          critical_issues: number
+          last_change_at: string
+          open_issues: number
+          total_changes: number
+        }[]
+      }
       get_sync_stats: {
         Args: never
         Returns: {
@@ -790,6 +1117,22 @@ export type Database = {
         }[]
       }
       link_campaign_members_to_mentors: { Args: never; Returns: number }
+      log_mentor_change: {
+        Args: {
+          p_change_type: string
+          p_created_by?: string
+          p_description?: string
+          p_field_name?: string
+          p_metadata?: Json
+          p_mn_id: string
+          p_new_value?: string
+          p_old_value?: string
+          p_severity?: string
+          p_source?: string
+          p_title: string
+        }
+        Returns: number
+      }
       normalize_email: { Args: { email: string }; Returns: string }
       normalize_phone: { Args: { phone: string }; Returns: string }
     }

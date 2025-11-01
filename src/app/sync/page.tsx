@@ -3,14 +3,13 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { StatusBadge } from '@/components/composite/status-badge';
 import { StatCard } from '@/components/composite/stat-card';
 import { SyncActionCard } from '@/components/features/sync/sync-action-card';
 import { SyncLogList, SyncLog as SyncLogType } from '@/components/features/sync/sync-log-list';
 import { ErrorLogList, ConflictError } from '@/components/features/sync/error-log-list';
-import { Settings, Upload, RefreshCw, AlertCircle, CheckCircle, Clock, FileText } from 'lucide-react';
+import { Settings, Upload, RefreshCw, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { PageLayout } from '@/components/layout/page-layout';
+import { PageSection } from '@/components/layout/page-section';
 
 interface InitStatus {
   initialized: boolean;
@@ -181,43 +180,20 @@ export default function SyncDashboard() {
 
 
   return (
-    <div className="min-h-screen bg-muted/20">
-      <div className="container mx-auto p-6 md:p-8 max-w-7xl">
-        {/* Header */}
-        <div className="mb-10">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-            <div>
-              <div className="inline-block mb-3">
-                <span className="text-sm font-semibold text-info-text bg-info-DEFAULT/10 px-4 py-2 rounded-full border border-info-DEFAULT/20">
-                  Data Synchronization
-                </span>
-              </div>
-              <h1 className="text-5xl md:text-6xl font-bold tracking-tight mb-4 bg-gradient-to-r from-foreground via-foreground to-foreground/70 bg-clip-text">
-                Sync Dashboard
-              </h1>
-              <p className="text-muted-foreground text-xl md:text-2xl font-light max-w-2xl">
-                Run syncs and monitor status.
-              </p>
-            </div>
-            <Link href="/settings?tab=api-config">
-              <Button size="lg" variant="outline" className="flex items-center gap-2 hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-all shadow-sm">
-                <Settings className="h-5 w-5" />
-                Configure
-              </Button>
-            </Link>
-          </div>
-        </div>
-
-        {/* System Status Section */}
-        <section className="mb-12">
-          <div className="mb-6">
-            <h2 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
-              <div className="w-1 h-8 bg-info-DEFAULT rounded-full"></div>
-              System Status
-            </h2>
-            <p className="text-muted-foreground text-base ml-7">System configuration and status.</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <PageLayout
+      badgeText="Data Synchronization"
+      title="Sync Dashboard"
+      headerActions={
+        <Link href="/settings?tab=api-config">
+          <Button size="lg" variant="outline" className="flex items-center gap-2 hover:bg-primary/10 hover:text-primary hover:border-primary/50 transition-all shadow-sm">
+            <Settings className="h-5 w-5" />
+            Configure
+          </Button>
+        </Link>
+      }
+    >
+      <PageSection>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatCard
             title="System Status"
             value={initStatus?.initialized ? 'Initialized' : 'Not Configured'}
@@ -247,81 +223,60 @@ export default function SyncDashboard() {
             colorScheme={errors.length > 0 ? 'error' : 'success'}
           />
         </div>
-      </section>
+      </PageSection>
 
-      {/* Sync Operations Section */}
-      <section className="mb-12">
-        <div className="mb-6">
-          <h2 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
-            <div className="w-1 h-8 bg-primary rounded-full"></div>
-            Sync Operations
-          </h2>
-          <p className="text-muted-foreground text-base ml-7">Run synchronization tasks.</p>
-        </div>
+      <PageSection
+        title="Sync Operations"
+      >
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SyncActionCard
-          icon={RefreshCw}
-          title="Periodic Sync"
-          description="Sync from APIs: Jotform signups/setup + Givebutter members + ETL + API contact sync"
-          tier={2}
-          actionLabel="Run Periodic Sync"
-          loading={syncRunning}
-          disabled={!initStatus?.initialized}
-          onAction={handlePeriodicSync}
-          outputLines={syncOutput}
-          onClearOutput={() => setSyncOutput([])}
-        />
-
-        <SyncActionCard
-          icon={Upload}
-          title="CSV Upload"
-          description="Upload Givebutter full export → match contacts → capture contact_ids"
-          tier={3}
-          actionLabel="Select CSV File"
-          loading={csvUploading}
-          onAction={() => document.getElementById('csv-upload')?.click()}
-          outputLines={uploadOutput}
-          onClearOutput={() => setUploadOutput([])}
-        >
-          <input
-            type="file"
-            accept=".csv"
-            onChange={handleFileUpload}
-            className="hidden"
-            id="csv-upload"
-            disabled={csvUploading}
+          <SyncActionCard
+            icon={RefreshCw}
+            title="Periodic Sync"
+            tier={2}
+            actionLabel="Run Periodic Sync"
+            loading={syncRunning}
+            disabled={!initStatus?.initialized}
+            onAction={handlePeriodicSync}
+            outputLines={syncOutput}
+            onClearOutput={() => setSyncOutput([])}
           />
-        </SyncActionCard>
-        </div>
-      </section>
 
-      {/* Recent Activity Section */}
-      <section className="mb-12">
-        <div className="mb-6">
-          <h2 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
-            <div className="w-1 h-8 bg-success-DEFAULT rounded-full"></div>
-            Recent Activity
-          </h2>
-          <p className="text-muted-foreground text-base ml-7">Recent sync operations.</p>
+          <SyncActionCard
+            icon={Upload}
+            title="CSV Upload"
+            tier={3}
+            actionLabel="Select CSV File"
+            loading={csvUploading}
+            onAction={() => document.getElementById('csv-upload')?.click()}
+            outputLines={uploadOutput}
+            onClearOutput={() => setUploadOutput([])}
+          >
+            <input
+              type="file"
+              accept=".csv"
+              onChange={handleFileUpload}
+              className="hidden"
+              id="csv-upload"
+              disabled={csvUploading}
+            />
+          </SyncActionCard>
         </div>
+      </PageSection>
+
+      <PageSection
+        title="Recent Activity"
+      >
         <SyncLogList
           logs={syncLogs}
           maxLogs={10}
         />
-      </section>
+      </PageSection>
 
-      {/* Errors & Conflicts Section */}
-      <section>
-        <div className="mb-6">
-          <h2 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
-            <div className="w-1 h-8 bg-error-DEFAULT rounded-full"></div>
-            Errors & Conflicts
-          </h2>
-          <p className="text-muted-foreground text-base ml-7">Review and resolve conflicts.</p>
-        </div>
+      <PageSection
+        title="Errors & Conflicts"
+      >
         <ErrorLogList errors={errors} />
-      </section>
-      </div>
-    </div>
+      </PageSection>
+    </PageLayout>
   );
 }

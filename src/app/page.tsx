@@ -2,12 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Separator } from '@/components/ui/separator';
 import { StatCard } from '@/components/composite/stat-card';
 import { ActionCard } from '@/components/composite/action-card';
-import { Users, DollarSign, FileText, Settings, Database, ArrowRight, GraduationCap } from 'lucide-react';
+import { Users, DollarSign, FileText, Settings, Database, GraduationCap } from 'lucide-react';
+import { PageLayout } from '@/components/layout/page-layout';
+import { PageSection } from '@/components/layout/page-section';
 
 interface DashboardStats {
   totalMentors: number;
@@ -39,33 +39,14 @@ export default function Home() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-muted/20">
-      <div className="container mx-auto p-6 md:p-8 max-w-7xl">
-        {/* Header */}
-        <div className="mb-10">
-          <div className="inline-block mb-4">
-            <span className="text-sm font-semibold text-primary bg-primary/10 px-4 py-2 rounded-full border border-primary/20">
-              SWAB Mentor Program 2025
-            </span>
-          </div>
-          <h1 className="text-5xl md:text-6xl font-bold tracking-tight mb-4 bg-gradient-to-r from-foreground via-foreground to-foreground/70 bg-clip-text">
-            Dashboard
-          </h1>
-          <p className="text-muted-foreground text-xl md:text-2xl font-light max-w-2xl">
-            Program overview and quick actions.
-          </p>
-        </div>
-
-        {/* Overview Section */}
-        <section className="mb-12 animate-fade-in">
-          <div className="mb-6">
-            <h2 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
-              <div className="w-1 h-8 bg-primary rounded-full"></div>
-              Overview
-            </h2>
-            <p className="text-muted-foreground text-base ml-7">Key program metrics.</p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <PageLayout
+      badgeText="SWAB Mentor Program 2025"
+      title="Dashboard"
+    >
+      <PageSection
+        className="animate-fade-in"
+      >
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             title="Total Mentors"
             value={stats?.totalMentors || 0}
@@ -101,23 +82,16 @@ export default function Home() {
             loading={loading}
           />
         </div>
-      </section>
+      </PageSection>
 
-      {/* Quick Actions Section */}
-      <section>
-        <div className="mb-6">
-          <h2 className="text-3xl font-bold tracking-tight mb-2 flex items-center gap-3">
-            <div className="w-1 h-8 bg-primary rounded-full"></div>
-            Actions
-          </h2>
-          <p className="text-muted-foreground text-base ml-7">Navigate to key sections.</p>
-        </div>
+      <PageSection
+        title="Actions"
+      >
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <ActionCard
             href="/mentors"
             icon={<Users className="h-6 w-6" />}
             title="View Mentors"
-            description="Search and manage mentors."
             colorScheme="info"
             footerContent={
               <>
@@ -130,7 +104,6 @@ export default function Home() {
             href="/sync"
             icon={<Database className="h-6 w-6" />}
             title="Sync Data"
-            description="Import from Jotform & Givebutter."
             colorScheme="primary"
             footerContent={
               <>
@@ -143,7 +116,6 @@ export default function Home() {
             href="/settings"
             icon={<Settings className="h-6 w-6" />}
             title="Configure Settings"
-            description="Configure API keys & settings."
             colorScheme="accent"
             footerContent={
               <>
@@ -153,8 +125,7 @@ export default function Home() {
             }
           />
         </div>
-      </section>
-      </div>
-    </div>
+      </PageSection>
+    </PageLayout>
   );
 }

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { ArrowRight } from 'lucide-react';
 import React from 'react';
 
@@ -7,12 +7,11 @@ interface ActionCardProps {
   href: string;
   icon: React.ReactNode;
   title: string;
-  description: string;
   footerContent: React.ReactNode;
   colorScheme?: 'primary' | 'info' | 'accent';
 }
 
-export function ActionCard({ href, icon, title, description, footerContent, colorScheme = 'primary' }: ActionCardProps) {
+export function ActionCard({ href, icon, title, footerContent, colorScheme = 'primary' }: ActionCardProps) {
   const colorClasses = {
     primary: {
       bg: 'bg-primary/10',
@@ -52,9 +51,6 @@ export function ActionCard({ href, icon, title, description, footerContent, colo
           <CardTitle className={`text-2xl ${colors.hoverText} transition-colors`}>
             {title}
           </CardTitle>
-          <CardDescription className="text-base mt-2">
-            {description}
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">

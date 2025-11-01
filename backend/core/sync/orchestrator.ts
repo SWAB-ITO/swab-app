@@ -46,10 +46,40 @@ export interface SyncLogEntry {
 export class SyncOrchestrator {
   private supabase: ReturnType<typeof createClient<Database>>;
   private syncLogId?: number;
+  private apiKeys: { jotform?: string; givebutter?: string } = {};
 
   constructor() {
     const config = getSupabaseConfig();
     this.supabase = createClient(config.url, config.serviceRoleKey || config.anonKey);
+  }
+
+  /**
+   * Load API keys from sync_configs table
+   */
+  async loadApiKeys(): Promise<void> {
+    const currentYear = new Date().getFullYear();
+
+    const { data: configs } = await this.supabase
+      .from('sync_configs')
+      .select('config_key, config_value')
+      .eq('year', currentYear)
+      .eq('active', true)
+      .in('config_key', ['jotform_api_key', 'givebutter_api_key']);
+
+    if (configs) {
+      configs.forEach(config => {
+        if (config.config_key === 'jotform_api_key') {
+          this.apiKeys.jotform = config.config_value;
+        } else if (config.config_key === 'givebutter_api_key') {
+          this.apiKeys.givebutter = config.config_value;
+        }
+      });
+    }
+
+    console.log('🔑 API keys loaded:', {
+      jotform: this.apiKeys.jotform ? '✓' : '✗',
+      givebutter: this.apiKeys.givebutter ? '✓' : '✗',
+    });
   }
 
   /**
@@ -118,11 +148,19 @@ export class SyncOrchestrator {
       // Parse command (e.g., "npm run sync:jotform-signups")
       const [cmd, ...args] = command.split(' ');
 
+      // Prepare environment variables with API keys from database
+      const env = {
+        ...process.env,
+        ...(this.apiKeys.jotform && { JOTFORM_API_KEY: this.apiKeys.jotform }),
+        ...(this.apiKeys.givebutter && { GIVEBUTTER_API_KEY: this.apiKeys.givebutter }),
+      };
+
       // Spawn the process
       const child = spawn(cmd, args, {
         cwd: process.cwd(),
         stdio: ['inherit', 'pipe', 'pipe'], // inherit stdin, pipe stdout/stderr
         shell: true,
+        env, // Pass environment variables
       });
 
       let stdout = '';
@@ -181,6 +219,9 @@ export class SyncOrchestrator {
     console.log('🔄 PERIODIC SYNC');
     console.log('='.repeat(80) + '\n');
 
+    // Load API keys from database
+    await this.loadApiKeys();
+
     const logId = await this.startSyncLog('automated', triggeredBy);
     const startTime = Date.now();
 
@@ -193,8 +234,9 @@ export class SyncOrchestrator {
       { name: '1. Jotform Signups', command: 'npm run sync:jotform-signups' },
       { name: '2. Jotform Setup', command: 'npm run sync:jotform-setup' },
       { name: '3. Jotform Training Signup', command: 'npm run sync:jotform-training-signup' },
-      { name: '4. Givebutter Members', command: 'npm run sync:givebutter-members' },
-      { name: '5. ETL Process', command: 'npm run etl' },
+      { name: '4. Partner Preferences', command: 'npm run sync:partner-preference' },
+      { name: '5. Givebutter Members', command: 'npm run sync:givebutter-members' },
+      { name: '6. ETL Process', command: 'npm run etl' },
     ];
 
     let failed = false;
@@ -226,12 +268,20 @@ export class SyncOrchestrator {
       error_message: failed ? errorMessage : undefined,
     });
 
-    // Update sync_config
+    // Update last sync time in sync_configs
     if (!failed) {
+      const currentYear = new Date().getFullYear();
       await this.supabase
-        .from('sync_config')
-        .update({ last_sync_at: new Date().toISOString() })
-        .eq('id', 1);
+        .from('sync_configs')
+        .upsert({
+          year: currentYear,
+          config_key: 'last_sync_at',
+          config_value: new Date().toISOString(),
+          config_type: 'datetime',
+          description: 'Last successful sync timestamp',
+        }, {
+          onConflict: 'year,config_key',
+        });
     }
 
     const duration = ((Date.now() - startTime) / 1000).toFixed(2);

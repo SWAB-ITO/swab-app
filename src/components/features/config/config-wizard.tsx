@@ -153,24 +153,29 @@ export function ConfigWizard({
   showStepIndicator = true,
   className,
 }: ConfigWizardProps) {
-  // Load initial step from localStorage if persistence is enabled
-  const getInitialStep = () => {
+  // Always start with initialStep during SSR to avoid hydration mismatch
+  const [currentStep, setCurrentStep] = useState(initialStep);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [isClient, setIsClient] = useState(false);
+
+  // Restore from localStorage AFTER component mounts on client
+  useEffect(() => {
+    setIsClient(true);
     if (persistState && typeof window !== 'undefined') {
       const stored = localStorage.getItem(storageKey);
       if (stored) {
         try {
-          const { currentStep } = JSON.parse(stored);
-          return Math.min(currentStep, steps.length - 1);
+          const { currentStep: savedStep } = JSON.parse(stored);
+          const validStep = Math.min(savedStep, steps.length - 1);
+          if (validStep !== initialStep) {
+            setCurrentStep(validStep);
+          }
         } catch {
-          // Invalid stored state, use default
+          // Invalid stored data, ignore
         }
       }
     }
-    return initialStep;
-  };
-
-  const [currentStep, setCurrentStep] = useState(getInitialStep);
-  const [validationError, setValidationError] = useState<string | null>(null);
+  }, [persistState, storageKey, initialStep, steps.length]);
 
   const step = steps[currentStep];
   const isFirstStep = currentStep === 0;

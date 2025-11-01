@@ -21,8 +21,9 @@ The auth system automatically detects the environment using `isUsingLocalSupabas
 ## Auth Pages
 
 - `/auth/login` - Email/password login
+- `/auth/magic-link` - Passwordless magic link login
 - `/auth/signup` - User registration
-- `/auth/callback` - OAuth callback handler
+- `/auth/callback` - OAuth callback handler (handles both email confirmation and magic links)
 - `/auth/auth-code-error` - Error page
 
 ## Enabling Auth for Production
@@ -35,11 +36,18 @@ Go to your Supabase project → Authentication:
 
 **Enable Email Provider:**
 - Authentication → Providers → Enable "Email"
+- For magic link authentication, make sure "Enable email provider" is checked
+- You can enable both password and magic link options
 
 **Set URLs:**
 - Authentication → URL Configuration
 - **Site URL**: `https://your-app.vercel.app`
 - **Redirect URLs**: Add `https://your-app.vercel.app/auth/callback`
+
+**Email Templates (Optional):**
+- Authentication → Email Templates
+- Customize the "Magic Link" template to match your brand
+- The default template works fine for getting started
 
 ### 2. Set Environment Variables
 
@@ -95,11 +103,21 @@ import { createClient } from '@backend/lib/supabase/client'
 export function MyComponent() {
   const supabase = createClient()
 
-  // Use supabase.auth methods
+  // Password login
   const handleLogin = async () => {
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
+    })
+  }
+
+  // Magic link login
+  const handleMagicLink = async () => {
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
+      },
     })
   }
 }

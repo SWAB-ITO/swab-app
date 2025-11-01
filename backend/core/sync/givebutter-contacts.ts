@@ -1,7 +1,7 @@
 /**
  * SYNC SCRIPT: Givebutter Contacts CSV → Database (Optimized)
  *
- * Imports ONLY mentor-relevant contacts from CSV using:
+ * Imports ALL contacts from CSV including tags (needed for "Dropped 25" detection) using:
  * - Industry-standard csv-parse library
  * - Batch processing (100 rows at a time)
  * - Concurrent database operations
@@ -40,38 +40,12 @@ async function syncContacts() {
   const supabase = createClient(config.url, config.serviceRoleKey || config.anonKey);
 
   console.log(`🔗 Connected to Supabase: ${config.url}\n`);
-
-  // Load mentor emails/phones for filtering
-  console.log('📋 Loading mentor identifiers...\n');
-
-  const [{ data: signups }, { data: setup }, { data: members }] = await Promise.all([
-    supabase.from('raw_mn_signups').select('uga_email, personal_email, phone'),
-    supabase.from('raw_mn_funds_setup').select('email, phone'),
-    supabase.from('raw_gb_campaign_members').select('email, phone')
-  ]);
-
-  const mentorEmails = new Set<string>();
-  const mentorPhones = new Set<string>();
-
-  const addIdentifiers = (data: any[], emailKeys: string[], phoneKey: string) => {
-    data?.forEach(row => {
-      emailKeys.forEach(key => {
-        if (row[key]) mentorEmails.add(row[key].toLowerCase().trim());
-      });
-      if (row[phoneKey]) mentorPhones.add(row[phoneKey].trim().replace(/\D/g, ''));
-    });
-  };
-
-  addIdentifiers(signups || [], ['uga_email', 'personal_email'], 'phone');
-  addIdentifiers(setup || [], ['email'], 'phone');
-  addIdentifiers(members || [], ['email'], 'phone');
-
-  console.log(`✅ Loaded ${mentorEmails.size} emails and ${mentorPhones.size} phones\n`);
   console.log(`📁 Processing CSV: ${CSV_PATH}\n`);
+  console.log('💡 Importing ALL contacts (including dropped mentors with tags)\n');
 
   const startTime = Date.now();
   let totalRows = 0;
-  let filtered = 0;
+  let skippedJunk = 0;
   let inserted = 0;
   let errors = 0;
 
@@ -112,17 +86,6 @@ async function syncContacts() {
     const contactId = parseInt(row['Givebutter Contact ID'], 10);
     if (!contactId) continue;
 
-    // Filter: only mentor-relevant contacts
-    const email = row['Primary Email']?.toLowerCase().trim();
-    const phone = row['Primary Phone']?.trim().replace(/\D/g, '');
-
-    const isMatch = (email && mentorEmails.has(email)) || (phone && mentorPhones.has(phone));
-
-    if (!isMatch) {
-      filtered++;
-      continue;
-    }
-
     // **CRITICAL FILTER: Reject junk/auto-generated duplicate contacts**
     // These have pattern "F.25.XXXXX" / "L.25.XXXXX" and no phone number
     const firstName = row['First Name'] || '';
@@ -130,7 +93,7 @@ async function syncContacts() {
     const isJunkContact = /^F\.\d+\.\d+$/.test(firstName) && /^L\.\d+\.\d+$/.test(lastName);
 
     if (isJunkContact) {
-      filtered++;
+      skippedJunk++;
       continue; // SKIP this junk duplicate - don't even save it to database
     }
 
@@ -166,7 +129,7 @@ async function syncContacts() {
       await processBatch(batch.splice(0, BATCH_SIZE));
 
       if (inserted % 500 === 0 && inserted > 0) {
-        console.log(`   Processed ${inserted} mentor contacts...`);
+        console.log(`   Processed ${inserted} contacts...`);
       }
     }
   }
@@ -183,8 +146,8 @@ async function syncContacts() {
   console.log('='.repeat(80));
   console.log(`📊 Results:`);
   console.log(`   Total CSV rows: ${totalRows.toLocaleString()}`);
-  console.log(`   Filtered (non-mentors): ${filtered.toLocaleString()}`);
-  console.log(`   Mentor contacts synced: ${inserted}`);
+  console.log(`   Skipped (junk contacts): ${skippedJunk.toLocaleString()}`);
+  console.log(`   Contacts synced: ${inserted}`);
   console.log(`   Errors: ${errors}`);
   console.log(`   Duration: ${duration}s`);
   console.log(`   Speed: ${Math.round(totalRows / parseFloat(duration)).toLocaleString()} rows/sec`);

@@ -9,6 +9,7 @@ interface WizardState {
     jotformSignupForm: string;
     jotformSetupForm: string;
     jotformTrainingSignupForm: string;
+    jotformPartnerPreferenceForm: string;
     givebutterCampaign: string;
   };
   testedApiKeys: {
@@ -21,7 +22,7 @@ interface WizardState {
   uploadedFile: File | null;
   uploadStatus: 'idle' | 'uploading' | 'success' | 'error';
   storedConfig: SyncConfig | null;
-  
+
   // UI state
   testingApis: boolean;
   discoveringJotform: boolean;
@@ -36,6 +37,7 @@ const initialState: WizardState = {
     jotformSignupForm: '',
     jotformSetupForm: '',
     jotformTrainingSignupForm: '',
+    jotformPartnerPreferenceForm: '',
     givebutterCampaign: '',
   },
   testedApiKeys: {},
@@ -53,7 +55,7 @@ const initialState: WizardState = {
 // 3. Define Actions
 type WizardAction =
   | { type: 'SET_API_KEY'; payload: { key: 'jotform' | 'givebutter'; value: string } }
-  | { type: 'SET_FORM_ID'; payload: { key: 'jotformSignupForm' | 'jotformSetupForm' | 'jotformTrainingSignupForm' | 'givebutterCampaign'; value: string } }
+  | { type: 'SET_FORM_ID'; payload: { key: 'jotformSignupForm' | 'jotformSetupForm' | 'jotformTrainingSignupForm' | 'jotformPartnerPreferenceForm' | 'givebutterCampaign'; value: string } }
   | { type: 'SET_API_STATUS'; payload: ApiStatus }
   | { type: 'SET_JOTFORM_FORMS'; payload: JotformForm[] }
   | { type: 'SET_GIVEBUTTER_CAMPAIGNS'; payload: GivebutterCampaign[] }
@@ -86,6 +88,7 @@ const wizardReducer = (state: WizardState, action: WizardAction): WizardState =>
                 jotformSignupForm: config.config.jotform_signup_form_id,
                 jotformSetupForm: config.config.jotform_setup_form_id,
                 jotformTrainingSignupForm: config.config.jotform_training_signup_form_id || '',
+                jotformPartnerPreferenceForm: config.config.jotform_partner_form_id || '',
                 givebutterCampaign: config.config.givebutter_campaign_code,
             };
         }

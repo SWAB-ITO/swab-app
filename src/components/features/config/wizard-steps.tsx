@@ -42,6 +42,7 @@ export interface SyncConfig {
     jotform_signup_form_id: string;
     jotform_setup_form_id: string;
     jotform_training_signup_form_id?: string;
+    jotform_partner_form_id?: string;
     givebutter_campaign_code: string;
     configured_at: string;
   } | null;
@@ -232,7 +233,6 @@ export function FormsStep() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-lg">Jotform Forms</CardTitle>
-              <CardDescription className="text-sm">Select three required forms.</CardDescription>
             </div>
             <Button
               onClick={handleDiscoverJotform}
@@ -253,7 +253,6 @@ export function FormsStep() {
               onChange={value => dispatch({ type: 'SET_FORM_ID', payload: { key: 'jotformSignupForm', value } })}
               searchable
               required
-              description="For initial mentor signups."
             />
             <FormSelector
               label="Setup Form"
@@ -263,7 +262,6 @@ export function FormsStep() {
               onChange={value => dispatch({ type: 'SET_FORM_ID', payload: { key: 'jotformSetupForm', value } })}
               searchable
               required
-              description="For mentor setup."
             />
             <FormSelector
               label="Training Signup Form"
@@ -273,7 +271,14 @@ export function FormsStep() {
               onChange={value => dispatch({ type: 'SET_FORM_ID', payload: { key: 'jotformTrainingSignupForm', value } })}
               searchable
               required
-              description="For training signups."
+            />
+            <FormSelector
+              label="Partner Preference Form"
+              placeholder="Select a form..."
+              options={jotformForms.map(form => ({ id: form.id, title: form.title, count: form.count, status: form.status }))}
+              value={apiKeys.jotformPartnerPreferenceForm}
+              onChange={value => dispatch({ type: 'SET_FORM_ID', payload: { key: 'jotformPartnerPreferenceForm', value } })}
+              searchable
             />
           </CardContent>
         )}
@@ -285,7 +290,6 @@ export function FormsStep() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-lg">Givebutter Campaign</CardTitle>
-              <CardDescription className="text-sm">Select a fundraising campaign.</CardDescription>
             </div>
             <Button
               onClick={handleDiscoverGivebutter}
@@ -306,7 +310,6 @@ export function FormsStep() {
               onChange={value => dispatch({ type: 'SET_FORM_ID', payload: { key: 'givebutterCampaign', value } })}
               searchable
               required
-              description="Fundraising campaign for this event."
             />
           </CardContent>
         )}
@@ -366,9 +369,6 @@ export function UploadStep() {
           </p>
           <p className="text-sm text-muted-foreground">
             or drag and drop
-          </p>
-          <p className="text-xs text-muted-foreground/80 mt-2">
-            Givebutter contacts export.
           </p>
         </label>
       </div>
@@ -446,35 +446,30 @@ export function ReviewStep({ onSaveConfig, onRunSync, savingConfig, syncRunning,
             id: 'jotform-api',
             label: 'Jotform API',
             completed: apiStatus.jotform === true || !!storedConfig?.configured,
-            required: true,
-            description: 'Jotform API key tested.'
+            required: true
           },
           {
             id: 'givebutter-api',
             label: 'Givebutter API',
             completed: apiStatus.givebutter === true || !!storedConfig?.configured,
-            required: true,
-            description: 'Givebutter API key tested.'
+            required: true
           },
           {
             id: 'forms-selected',
             label: 'Forms & Campaigns',
             completed: !!(apiKeys.jotformSignupForm && apiKeys.jotformSetupForm && apiKeys.jotformTrainingSignupForm && apiKeys.givebutterCampaign),
-            required: true,
-            description: 'All required forms selected.'
+            required: true
           },
           {
             id: 'csv-uploaded',
             label: 'CSV File',
-            completed: uploadStatus === 'success',
-            description: 'Givebutter export uploaded.'
+            completed: uploadStatus === 'success'
           },
           {
             id: 'config-saved',
             label: 'Configuration Saved',
             completed: !!storedConfig?.configured,
-            required: true,
-            description: 'Settings saved to database.'
+            required: true
           },
         ]}
       />
@@ -544,11 +539,6 @@ export function ReviewStep({ onSaveConfig, onRunSync, savingConfig, syncRunning,
         </div>
       )}
 
-      {!syncRunning && syncProgress.length === 0 && (
-        <div className="text-center text-sm text-muted-foreground">
-          <p>This will synchronize all data from your sources.</p>
-        </div>
-      )}
     </div>
   );
 }

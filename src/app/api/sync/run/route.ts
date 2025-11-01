@@ -22,6 +22,10 @@ const SYNC_STEPS = [
     script: 'backend/core/sync/jotform-training-signup.ts',
   },
   {
+    name: 'Partner Preferences',
+    script: 'backend/core/sync/partner-preference.ts',
+  },
+  {
     name: 'Givebutter Members',
     script: 'backend/core/sync/givebutter-members.ts',
   },
@@ -37,28 +41,51 @@ export async function POST(request: NextRequest) {
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
   const supabase = createClient(supabaseUrl, supabaseKey);
 
-  // Load configuration from database
-  const { data: config, error: configError } = await supabase
-    .from('sync_config')
-    .select('*')
-    .eq('id', 1)
-    .single();
+  // Load configuration from database (new sync_configs table)
+  const currentYear = new Date().getFullYear();
+  const { data: configRows, error: configError } = await supabase
+    .from('sync_configs')
+    .select('config_key, config_value')
+    .eq('year', currentYear)
+    .eq('active', true);
 
-  if (configError || !config) {
+  if (configError || !configRows || configRows.length === 0) {
     return NextResponse.json(
       { error: 'Sync configuration not found. Please configure APIs first.' },
       { status: 400 }
     );
   }
 
-  const {
-    jotform_api_key: jotformApiKey,
-    givebutter_api_key: givebutterApiKey,
-    jotform_signup_form_id: jotformSignupFormId,
-    jotform_setup_form_id: jotformSetupFormId,
-    jotform_training_signup_form_id: jotformTrainingSignupFormId,
-    givebutter_campaign_code: givebutterCampaignCode,
-  } = config;
+  // Transform array of config rows into object
+  const config: Record<string, string> = {};
+  configRows.forEach(row => {
+    config[row.config_key] = row.config_value;
+  });
+
+  // Validate required keys
+  const requiredKeys = [
+    'jotform_api_key',
+    'givebutter_api_key',
+    'jotform_signup_form_id',
+    'jotform_setup_form_id',
+    'givebutter_campaign_code',
+  ];
+
+  const missingKeys = requiredKeys.filter(key => !config[key]);
+  if (missingKeys.length > 0) {
+    return NextResponse.json(
+      { error: `Missing required configuration: ${missingKeys.join(', ')}` },
+      { status: 400 }
+    );
+  }
+
+  const jotformApiKey = config.jotform_api_key;
+  const givebutterApiKey = config.givebutter_api_key;
+  const jotformSignupFormId = config.jotform_signup_form_id;
+  const jotformSetupFormId = config.jotform_setup_form_id;
+  const jotformTrainingSignupFormId = config.jotform_training_signup_form_id || '';
+  const jotformPartnerFormId = config.jotform_partner_form_id || '';
+  const givebutterCampaignCode = config.givebutter_campaign_code;
 
   // Create a readable stream for SSE
   const encoder = new TextEncoder();
@@ -96,7 +123,8 @@ export async function POST(request: NextRequest) {
               JOTFORM_API_KEY: jotformApiKey,
               JOTFORM_SIGNUP_FORM_ID: jotformSignupFormId,
               JOTFORM_SETUP_FORM_ID: jotformSetupFormId,
-              JOTFORM_TRAINING_SIGNUP_FORM_ID: jotformTrainingSignupFormId || '252935716589069',
+              JOTFORM_TRAINING_SIGNUP_FORM_ID: jotformTrainingSignupFormId,
+              JOTFORM_PARTNER_FORM_ID: jotformPartnerFormId,
               GIVEBUTTER_API_KEY: givebutterApiKey,
               GIVEBUTTER_CAMPAIGN_ID: givebutterCampaignCode,
             }

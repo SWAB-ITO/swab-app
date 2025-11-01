@@ -4,6 +4,7 @@ export interface SyncConfig {
   jotformSignupFormId: string;
   jotformSetupFormId: string;
   jotformTrainingFormId: string;
+  jotformPartnerFormId?: string;
   givebutterCampaignCode: string;
   givebutterMentorTag: string;
   fundraisingGoal: number;
@@ -31,10 +32,13 @@ export async function loadSyncConfig(
     throw new Error(`No active sync configuration found for year ${year}`);
   }
 
-  const getConfig = (key: string): string => {
+  const getConfig = (key: string, required: boolean = true): string => {
     const config = data.find((c) => c.config_key === key);
     if (!config) {
-      throw new Error(`Missing required config: ${key} for year ${year}`);
+      if (required) {
+        throw new Error(`Missing required config: ${key} for year ${year}`);
+      }
+      return '';
     }
     return config.config_value;
   };
@@ -43,6 +47,7 @@ export async function loadSyncConfig(
     jotformSignupFormId: getConfig('jotform_signup_form_id'),
     jotformSetupFormId: getConfig('jotform_setup_form_id'),
     jotformTrainingFormId: getConfig('jotform_training_form_id'),
+    jotformPartnerFormId: getConfig('jotform_partner_form_id', false) || undefined,
     givebutterCampaignCode: getConfig('givebutter_campaign_code'),
     givebutterMentorTag: getConfig('givebutter_mentor_tag'),
     fundraisingGoal: parseInt(getConfig('fundraising_goal')),

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { LucideIcon, ChevronDown, ChevronUp } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ConsoleOutput } from '@/components/composite/console-output';
@@ -23,11 +23,6 @@ export interface SyncActionCardProps {
    * Title of the sync action
    */
   title: string;
-
-  /**
-   * Detailed description of what this action does
-   */
-  description: string;
 
   /**
    * Tier level of this sync action (1-4)
@@ -164,7 +159,6 @@ function getTierConfig(tier: SyncTier): { variant: 'default' | 'secondary' | 'ou
 export function SyncActionCard({
   icon: Icon,
   title,
-  description,
   tier,
   actionLabel = 'Run',
   loading = false,
@@ -195,7 +189,6 @@ export function SyncActionCard({
           </CardTitle>
           <Badge variant={tierConfig.variant}>{tierConfig.label}</Badge>
         </div>
-        <CardDescription>{description}</CardDescription>
       </CardHeader>
 
       <CardContent className="space-y-4">

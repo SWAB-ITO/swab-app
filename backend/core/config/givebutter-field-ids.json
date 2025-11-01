@@ -1,0 +1,72 @@
+{
+  "description": "Givebutter Custom Field ID Mapping - Retrieved from API 2025-11-01",
+  "generated_date": "2025-11-01",
+  "field_mappings": {
+    "256669": {
+      "field_id": "custom_fields_field_256669",
+      "name": "✅ Mentor Training Signed Up",
+      "type": "checkbox",
+      "description": "Has signed up for training session"
+    },
+    "256670": {
+      "field_id": "custom_fields_field_256670",
+      "name": "🎁 Givebutter Page Setup",
+      "type": "checkbox",
+      "description": "Has created Givebutter fundraising page"
+    },
+    "256672": {
+      "field_id": "custom_fields_field_256672",
+      "name": "🤝 Partner Preference",
+      "type": "percentage",
+      "description": "Mentor's partner ranking preference"
+    },
+    "256673": {
+      "field_id": "custom_fields_field_256673",
+      "name": "🧑‍🏫 Mentor Training Complete",
+      "type": "checkbox",
+      "description": "Has completed training"
+    },
+    "256675": {
+      "field_id": "custom_fields_field_256675",
+      "name": "📈 Fully Fundraised",
+      "type": "checkbox",
+      "description": "Has raised at least $75"
+    },
+    "256676": {
+      "field_id": "custom_fields_field_256676",
+      "name": "📱Custom Text Message 1️⃣",
+      "type": "textarea",
+      "description": "Personalized text message for campaigns"
+    },
+    "258777": {
+      "field_id": "custom_fields_field_258777",
+      "name": "💌 Custom Email Message 1️⃣",
+      "type": "textarea",
+      "description": "Personalized email message for campaigns"
+    },
+    "262775": {
+      "field_id": "custom_fields_field_262775",
+      "name": "🤑 Amount Fundraised",
+      "type": "number",
+      "description": "Numeric amount raised"
+    },
+    "262847": {
+      "field_id": "custom_fields_field_262847",
+      "name": "📱Custom Text Message 2️⃣",
+      "type": "textarea",
+      "description": "Second personalized text message for campaigns"
+    },
+    "264472": {
+      "field_id": "custom_fields_field_264472",
+      "name": "🎓 UGA Class",
+      "type": "select",
+      "description": "UGA class year"
+    },
+    "265730": {
+      "field_id": "custom_fields_field_265730",
+      "name": "📆 Shift Preference",
+      "type": "select",
+      "description": "Preferred shift for Event Day"
+    }
+  }
+}

@@ -56,7 +56,7 @@ async function importMentorsData() {
   console.log(`   Total mentors: ${exportData.stats.total_mentors}`);
   console.log(`   Active mentors: ${exportData.stats.active_mentors}\n`);
 
-  const supabase = createClient(PROD_SUPABASE_URL, PROD_SUPABASE_KEY);
+  const supabase = createClient(PROD_SUPABASE_URL!, PROD_SUPABASE_KEY!);
 
   // Test connection
   console.log('🔍 Testing production connection...');
