@@ -26,6 +26,14 @@
         "node",
         "build/mcp/givebutter/server.js"
       ]
+    },
+    "vercel": {
+      "transport": "http",
+      "url": "https://mcp.vercel.com"
+    },
+    "supabase": {
+      "transport": "http",
+      "url": "https://mcp.supabase.com/mcp"
     }
   }
 }

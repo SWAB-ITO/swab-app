@@ -6,8 +6,8 @@ import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { JotformClient } from "../../backend/lib/infrastructure/clients/jotform-client.js";
-import { Logger } from "../../backend/lib/utils/logger.js";
+import { JotformClient } from "../../../backend/lib/infrastructure/clients/jotform-client.js";
+import { Logger } from "../../../backend/lib/utils/logger.js";
 
 // Initialize
 const logger = new Logger('JotformMCP');
